@@ -1,0 +1,276 @@
+.app-root {
+  min-height: 100vh;
+  padding: 4px;
+  box-sizing: border-box;
+  position: relative;
+  overflow-x: auto;
+}
+
+.app-login-root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-layout {
+  display: flex;
+  width: max(100%, 1040px);
+  min-width: 1040px;
+  gap: 4px;
+  min-height: calc(100vh - 8px);
+}
+
+.left-panel {
+  width: 280px;
+  border: 1px solid #cfd9ea;
+  border-radius: 3px;
+  background: #ffffff;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.right-panel {
+  flex: 1;
+  min-width: 740px;
+  border: 1px solid #cfd9ea;
+  border-radius: 3px;
+  background: #ffffff;
+  padding: 4px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.error-box {
+  border: 1px solid #f1c5c5;
+  background: #fff5f5;
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 12px;
+  color: #8f2f2f;
+}
+
+.panel-root {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #1f3761;
+}
+
+.panel-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel-locked {
+  opacity: 0.9;
+}
+
+.main-btn {
+  border: 1px solid #abc0e0;
+  background: #eaf1fd;
+  color: #17305f;
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 12px;
+  height: 24px;
+}
+
+.danger-btn {
+  border-color: #efbebe;
+  background: #fff3f3;
+  color: #9e2f2f;
+}
+
+.mini-btn {
+  border: 1px solid #bfd0e8;
+  background: #f3f7ff;
+  color: #2a446f;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 11px;
+  height: 22px;
+}
+
+.text-input {
+  border: 1px solid #c7d3e8;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-size: 12px;
+  min-height: 24px;
+  box-sizing: border-box;
+}
+
+.path-input {
+  min-width: 280px;
+}
+
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 4px;
+}
+
+.kv-wrap {
+  border: 1px solid #dfe7f3;
+  border-radius: 3px;
+  padding: 2px;
+}
+
+.frontend-message-bar {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid #cfd8ea;
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+
+.frontend-message-bar.status-loading {
+  background: #edf3ff;
+  color: #1b4d96;
+}
+
+.frontend-message-bar.status-success {
+  background: #edf9ef;
+  border-color: #b8dfbf;
+  color: #1b7a2f;
+}
+
+.frontend-message-bar.status-error {
+  background: #fff2f2;
+  border-color: #f2c2c2;
+  color: #8c2a2a;
+}
+
+.frontend-message-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  width: 100%;
+}
+
+.frontend-message-dismiss-btn {
+  border: 1px solid #c7d3e8;
+  background: #f7faff;
+  color: #29446f;
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+.fap-name-row {
+  grid-template-columns: minmax(220px, 1fr);
+}
+
+.metadata-title {
+  margin-top: 2px;
+}
+
+.fap-metadata-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.fap-metadata-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.list-wrap {
+  border: 1px solid #dfe7f3;
+  border-radius: 3px;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 80px 52px;
+  gap: 4px;
+  border-bottom: 1px solid #edf1f7;
+  padding: 3px 5px;
+  align-items: center;
+  min-height: 26px;
+  box-sizing: border-box;
+}
+
+.list-name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-meta {
+  font-size: 11px;
+  color: #48648f;
+  text-align: right;
+}
+
+.zip-overlay-root {
+  position: fixed;
+  inset: 0;
+  background: rgba(80, 88, 102, 0.34);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+}
+
+.zip-overlay-popup {
+  width: 280px;
+  min-height: 124px;
+  border: 1px solid #c8d1df;
+  border-radius: 6px;
+  background: #ffffff;
+  padding: 6px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.zip-overlay-spinner-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.zip-overlay-title {
+  font-size: 12px;
+  color: #1f3761;
+  font-weight: 600;
+}
+
+.zip-overlay-log {
+  min-height: 42px;
+  border: 1px solid #d8e0ee;
+  border-radius: 3px;
+  background: #f8fbff;
+  color: #2f4b78;
+  font-size: 11px;
+  padding: 4px;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.zip-abort-btn {
+  align-self: center;
+  min-width: 94px;
+}
