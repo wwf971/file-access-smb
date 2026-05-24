@@ -14,7 +14,7 @@ const FileAccessPointOverviewPanel = observer(() => {
         <button
           type="button"
           className="main-btn"
-          disabled={fileAccessPointStore.isSaving}
+          disabled={fileAccessPointStore.isSaving || !fileAccessPointStore.canWrite}
           onClick={() => {
             fileAccessPointStore.requestCreateOne()
           }}

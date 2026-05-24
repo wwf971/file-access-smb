@@ -40,7 +40,6 @@ database_bootstrap_error_text = ""
 
 
 @app.get("/health/ping")
-@app.get("/api/health/ping")
 def health_ping():
     return make_json_response(
         0,
@@ -54,7 +53,6 @@ def health_ping():
 
 
 @app.get("/health/database")
-@app.get("/api/health/database")
 def health_database():
     return make_json_response(
         0,
@@ -77,14 +75,19 @@ register_file_access_point_routes(app, sock, make_json_response, validate_auth_t
 @app.before_request
 def auth_guard():
     path = str(request.path or "")
-    if not path.startswith("/api/"):
+    protected_prefixes = (
+        "/file-access-point/",
+        "/health/database",
+        "/login/check",
+    )
+    if not path.startswith(protected_prefixes):
         return None
-    if path.startswith("/api/file-access-point/zip/ws/"):
+    if path.startswith("/file-access-point/zip/ws/"):
         return None
     if path in (
-        "/api/login",
-        "/api/login/token",
-        "/api/health/ping",
+        "/login",
+        "/login/token",
+        "/health/ping",
     ):
         return None
     if is_request_authorized():

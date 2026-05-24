@@ -37,6 +37,7 @@ const FileAccessPointConfigPanel = observer(() => {
     })
   }, [item?.fileAccessPointId])
 
+  const canWrite = fileAccessPointStore.canWrite
   const isPanelLocked = fileAccessPointStore.isChecking || fileAccessPointStore.isSaving || fileAccessPointStore.isDeleting
 
   const selectedRowIndex = selectedMetadataTag
@@ -150,7 +151,7 @@ const FileAccessPointConfigPanel = observer(() => {
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="name"
-          disabled={isPanelLocked || !item.isDeletable}
+          disabled={isPanelLocked || !item.isDeletable || !canWrite}
         />
       </div>
       <MetadataKeyValues
@@ -162,7 +163,7 @@ const FileAccessPointConfigPanel = observer(() => {
         }}
         config={{
           isLocked: isPanelLocked,
-          isEditable: item.isDeletable,
+          isEditable: item.isDeletable && canWrite,
         }}
         onEvent={async (eventType, eventData) => {
           if (eventType === 'selectedRowIdChange') {
@@ -273,7 +274,7 @@ const FileAccessPointConfigPanel = observer(() => {
         <button
           type="button"
           className="main-btn"
-          disabled={!item.isDeletable || isPanelLocked}
+          disabled={!item.isDeletable || isPanelLocked || !canWrite}
           onClick={async () => {
             const result = await fileAccessPointStore.requestUpdateCurrent(name, buildMetadataObject())
             setMessageState({
@@ -287,7 +288,7 @@ const FileAccessPointConfigPanel = observer(() => {
         <button
           type="button"
           className="main-btn danger-btn"
-          disabled={!item.isDeletable || isPanelLocked}
+          disabled={!item.isDeletable || isPanelLocked || !canWrite}
           onClick={async () => {
             const result = await fileAccessPointStore.requestDeleteCurrent()
             setMessageState({

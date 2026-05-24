@@ -20,7 +20,7 @@ export class ServiceStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/api/health/ping')
+      const data = await requestAuthenticatedJson('/health/ping')
       runInAction(() => {
         this.pingText = JSON.stringify(data)
       })
@@ -39,7 +39,7 @@ export class ServiceStore {
 
   async requestDatabaseInfo() {
     try {
-      const data = await requestAuthenticatedJson('/api/health/database')
+      const data = await requestAuthenticatedJson('/health/database')
       runInAction(() => {
         this.databaseText = JSON.stringify(data)
       })

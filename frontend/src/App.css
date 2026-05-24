@@ -222,6 +222,58 @@
   text-align: right;
 }
 
+.explore-name-cell {
+  width: 100%;
+  min-height: 20px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.explore-name-cell.is-locked {
+  opacity: 0.72;
+}
+
+.explore-name-text {
+  flex: 1;
+  min-width: 0;
+  min-height: 20px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.explore-name-edit {
+  flex: 1;
+  min-width: 0;
+  min-height: 20px;
+  line-height: 20px;
+  border: 1px solid #bcd0ee;
+  border-radius: 3px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.explore-name-spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.explore-row-renaming {
+  background: #f2f5fb;
+  color: #7d8ca6;
+}
+
 .zip-overlay-root {
   position: fixed;
   inset: 0;

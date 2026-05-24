@@ -20,6 +20,7 @@ class AuthStore {
   message = ''
   messageType: 'error' | 'success' = 'error'
   isPasswordVisible = false
+  permission = 'R'
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true })
@@ -105,6 +106,7 @@ class AuthStore {
     runInAction(() => {
       this.token = ''
       this.isLoggedIn = false
+      this.permission = 'R'
       this.message = 'Session expired, please login again'
       this.messageType = 'error'
     })
@@ -117,7 +119,7 @@ class AuthStore {
       this.message = ''
     })
     try {
-      const data = await this.requestJson('/api/login', {
+      const data = await this.requestJson('/login', {
         method: 'POST',
         body: JSON.stringify({
           username: this.username,
@@ -127,6 +129,7 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
         this.password = ''
         this.message = 'Login success'
@@ -137,6 +140,7 @@ class AuthStore {
     } catch (error: unknown) {
       runInAction(() => {
         this.isLoggedIn = false
+        this.permission = 'R'
         this.message = String(error)
         this.messageType = 'error'
       })
@@ -154,7 +158,7 @@ class AuthStore {
       this.message = ''
     })
     try {
-      const data = await this.requestJson('/api/login/token', {
+      const data = await this.requestJson('/login/token', {
         method: 'POST',
         body: JSON.stringify({
           token: this.token,
@@ -163,6 +167,7 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
         this.message = 'Login success'
         this.messageType = 'success'
@@ -172,6 +177,7 @@ class AuthStore {
     } catch (error: unknown) {
       runInAction(() => {
         this.isLoggedIn = false
+        this.permission = 'R'
         this.message = String(error)
         this.messageType = 'error'
       })

@@ -14,7 +14,10 @@ function buildParentPath(path: string) {
     return '/'
   }
   parts.pop()
-  return `/${parts.join('/')}` || '/'
+  if (parts.length === 0) {
+    return '/'
+  }
+  return `/${parts.join('/')}`
 }
 
 function buildNextPath(currentPath: string, itemName: string) {
@@ -35,9 +38,93 @@ const FOLDER_COLUMNS_SIZE = {
   size: { width: 90, minWidth: 70, resizable: true },
 }
 
+type NameCellProps = {
+  rowId: string
+  name: string
+  isEditing: boolean
+  isRenaming: boolean
+  isRowLocked: boolean
+  onStartEditing: () => void
+  onCancelEditing: () => void
+  onCommitEditing: (nextName: string) => void
+}
+
+const NameCell = ({
+  rowId,
+  name,
+  isEditing,
+  isRenaming,
+  isRowLocked,
+  onStartEditing,
+  onCancelEditing,
+  onCommitEditing,
+}: NameCellProps) => {
+  const editRef = React.useRef<HTMLDivElement | null>(null)
+
+  React.useEffect(() => {
+    if (!isEditing || !editRef.current) {
+      return
+    }
+    editRef.current.focus()
+    const range = document.createRange()
+    range.selectNodeContents(editRef.current)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }, [isEditing, rowId])
+
+  return (
+    <div className={`explore-name-cell ${isRowLocked ? 'is-locked' : ''}`}>
+      {isEditing ? (
+        <div
+          ref={editRef}
+          className="explore-name-edit"
+          contentEditable={true}
+          suppressContentEditableWarning={true}
+          onBlur={(event) => {
+            onCommitEditing(String(event.currentTarget.textContent || '').trim())
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              onCommitEditing(String(event.currentTarget.textContent || '').trim())
+              return
+            }
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              onCancelEditing()
+            }
+          }}
+        >
+          {name}
+        </div>
+      ) : (
+        <div
+          className="explore-name-text"
+          onDoubleClick={() => {
+            if (isRowLocked) {
+              return
+            }
+            onStartEditing()
+          }}
+        >
+          {name}
+        </div>
+      )}
+      {isRenaming ? (
+        <span className="explore-name-spinner">
+          <SpinningCircle width={12} height={12} />
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 const FileExplorePanel = observer(() => {
   const item = fileAccessPointStore.selectedItem
   const exploreState = item ? fileAccessPointStore.getExploreState(item.fileAccessPointId) : null
+  const canWrite = fileAccessPointStore.canWrite
   const [messageState, setMessageState] = useState({
     status: 'idle',
     messageText: '',
@@ -85,7 +172,7 @@ const FileExplorePanel = observer(() => {
       messageText: `Downloading: ${targetPath}`,
     })
     try {
-      const response = await requestAuthenticatedBlob('/api/file-access-point/explore/download', {
+      const response = await requestAuthenticatedBlob('/file-access-point/explore/download', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -123,10 +210,66 @@ const FileExplorePanel = observer(() => {
   const folderRows = (exploreState?.items || []).map((exploreItem) => ({
     id: `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`,
     data: {
-      name: exploreItem.name,
+      name: (
+        <NameCell
+          rowId={`${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
+          name={
+            exploreState?.editingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
+              ? (exploreState?.editingName || exploreItem.name)
+              : exploreItem.name
+          }
+          isEditing={exploreState?.editingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
+          isRenaming={exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
+          isRowLocked={!canWrite || Boolean(exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`)}
+          onStartEditing={() => {
+            if (!item) {
+              return
+            }
+            fileAccessPointStore.setExploreEditingRow(
+              item.fileAccessPointId,
+              `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`,
+              exploreItem.name,
+            )
+          }}
+          onCancelEditing={() => {
+            if (!item) {
+              return
+            }
+            fileAccessPointStore.setExploreEditingRow(item.fileAccessPointId, null, '')
+          }}
+          onCommitEditing={async (nextName: string) => {
+            if (!item || !exploreState) {
+              return
+            }
+            const rowId = `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
+            if (!nextName || nextName === exploreItem.name) {
+              fileAccessPointStore.setExploreEditingRow(item.fileAccessPointId, null, '')
+              return
+            }
+            const targetPath = buildNextPath(exploreState.path || '/', exploreItem.name)
+            setMessageState({
+              status: 'loading',
+              messageText: `Renaming: ${exploreItem.name} -> ${nextName}`,
+            })
+            const result = await fileAccessPointStore.requestRenameExploreItem(
+              item.fileAccessPointId,
+              targetPath,
+              nextName,
+              rowId,
+            )
+            setMessageState({
+              status: result?.isSuccess ? 'success' : 'error',
+              messageText: result?.messageText || '',
+            })
+          }}
+        />
+      ),
       type: exploreItem.isDirectory ? 'dir' : 'file',
       size: exploreItem.isDirectory ? '-' : String(exploreItem.sizeBytes),
     },
+    rowClassName: exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
+      ? 'explore-row-renaming'
+      : '',
   }))
 
   return (
@@ -198,6 +341,9 @@ const FileExplorePanel = observer(() => {
           listOnly={true}
           selectedRowId={null}
           onRowDoubleClick={(rowId: string) => {
+            if (exploreState?.renamingRowId) {
+              return
+            }
             const normalizedRowId = String(rowId || '')
             const isDir = normalizedRowId.startsWith('d:')
             if (!isDir) {
@@ -231,19 +377,25 @@ const FileExplorePanel = observer(() => {
               type: 'item',
               name: 'Download',
               data: { action: 'download' },
-              disabled: !contextMenuState.rowId?.startsWith('f:'),
+              disabled: !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId),
             },
             {
               type: 'item',
               name: 'Download Zip',
               data: { action: 'download-zip' },
-              disabled: !contextMenuState.rowId?.startsWith('d:') || fileAccessPointStore.isZipRunning,
+              disabled: !contextMenuState.rowId?.startsWith('d:') || fileAccessPointStore.isZipRunning || Boolean(exploreState?.renamingRowId),
             },
             {
               type: 'item',
               name: 'Open',
               data: { action: 'open' },
-              disabled: !contextMenuState.rowId?.startsWith('d:'),
+              disabled: !contextMenuState.rowId?.startsWith('d:') || Boolean(exploreState?.renamingRowId),
+            },
+            {
+              type: 'item',
+              name: 'Rename',
+              data: { action: 'rename' },
+              disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
             },
           ]}
           position={contextMenuState.position}
@@ -270,6 +422,10 @@ const FileExplorePanel = observer(() => {
             }
             if (menuItem?.data?.action === 'download-zip' && exploreItem.isDirectory) {
               fileAccessPointStore.requestStartZip(buildNextPath(exploreState?.path || '/', exploreItem.name))
+            }
+            if (menuItem?.data?.action === 'rename' && item && canWrite) {
+              const rowId = contextMenuState.rowId || ''
+              fileAccessPointStore.setExploreEditingRow(item.fileAccessPointId, rowId, exploreItem.name)
             }
           }}
         />

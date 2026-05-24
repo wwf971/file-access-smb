@@ -8,6 +8,7 @@ export type FileAccessPointItem = {
   name: string
   sourceType: 'config' | 'database'
   isDeletable: boolean
+  permission: string
   metadata: {
     host: string
     username: string
@@ -34,6 +35,9 @@ type ExploreState = {
   path: string
   items: ExploreItem[]
   isExploring: boolean
+  editingRowId: string | null
+  editingName: string
+  renamingRowId: string | null
 }
 
 export class FileAccessPointStore {
@@ -61,11 +65,22 @@ export class FileAccessPointStore {
     return this.items.find((item) => item.fileAccessPointId === this.selectedId) || null
   }
 
+  get canRead() {
+    return String(authStore.permission || '').toUpperCase().includes('R')
+  }
+
+  get canWrite() {
+    return String(authStore.permission || '').toUpperCase().includes('W')
+  }
+
   createExploreState() {
     return {
       path: '/',
       items: [],
       isExploring: false,
+      editingRowId: null,
+      editingName: '',
+      renamingRowId: null,
     }
   }
 
@@ -85,6 +100,17 @@ export class FileAccessPointStore {
     state.path = String(path || '/')
   }
 
+  setExploreEditingRow(fileAccessPointId: string, rowId: string | null, editingName = '') {
+    const state = this.getExploreState(fileAccessPointId)
+    state.editingRowId = rowId
+    state.editingName = editingName
+  }
+
+  setExploreEditingName(fileAccessPointId: string, editingName: string) {
+    const state = this.getExploreState(fileAccessPointId)
+    state.editingName = editingName
+  }
+
   setSelected(id: string, panel: 'config' | 'explore') {
     this.selectedId = id
     this.selectedPanel = panel
@@ -99,7 +125,7 @@ export class FileAccessPointStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/api/file-access-point/list')
+      const data = await requestAuthenticatedJson('/file-access-point/list')
       const items = Array.isArray(data.items) ? (data.items as FileAccessPointItem[]) : []
       runInAction(() => {
         this.items = items
@@ -131,6 +157,9 @@ export class FileAccessPointStore {
   }
 
   async requestCreateOne() {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
     if (this.isSaving) {
       return { isSuccess: false, messageText: 'busy' }
     }
@@ -138,7 +167,7 @@ export class FileAccessPointStore {
       this.isSaving = true
     })
     try {
-      await requestAuthenticatedJson('/api/file-access-point/create', {
+      await requestAuthenticatedJson('/file-access-point/create', {
         method: 'POST',
         body: JSON.stringify({
           name: `smb_${Date.now()}`,
@@ -170,6 +199,9 @@ export class FileAccessPointStore {
   }
 
   async requestUpdateCurrent(name: string, metadata: Record<string, string>) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
     if (this.isSaving || !this.selectedItem) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
@@ -177,7 +209,7 @@ export class FileAccessPointStore {
       this.isSaving = true
     })
     try {
-      await requestAuthenticatedJson('/api/file-access-point/update', {
+      await requestAuthenticatedJson('/file-access-point/update', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
@@ -200,6 +232,9 @@ export class FileAccessPointStore {
   }
 
   async requestDeleteCurrent() {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
     if (this.isDeleting || !this.selectedItem) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
@@ -208,7 +243,7 @@ export class FileAccessPointStore {
     })
     try {
       const deletingId = this.selectedItem.fileAccessPointId
-      await requestAuthenticatedJson('/api/file-access-point/delete', {
+      await requestAuthenticatedJson('/file-access-point/delete', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: deletingId,
@@ -247,8 +282,8 @@ export class FileAccessPointStore {
     }, normalizedTimeoutMs)
     try {
       const url = isForceReconnect
-        ? '/api/file-access-point/connection/reconnect'
-        : '/api/file-access-point/connection/check'
+        ? '/file-access-point/connection/reconnect'
+        : '/file-access-point/connection/check'
       await requestAuthenticatedJson(url, {
         method: 'POST',
         body: JSON.stringify({
@@ -289,7 +324,7 @@ export class FileAccessPointStore {
       state.path = path
     })
     try {
-      const data = await requestAuthenticatedJson('/api/file-access-point/explore/list', {
+      const data = await requestAuthenticatedJson('/file-access-point/explore/list', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -298,7 +333,16 @@ export class FileAccessPointStore {
       })
       const items = Array.isArray(data.items) ? (data.items as ExploreItem[]) : []
       runInAction(() => {
-        this.getExploreState(fileAccessPointId).items = items
+        const exploreState = this.getExploreState(fileAccessPointId)
+        exploreState.items = items
+        const existingRowIdSet = new Set(items.map((exploreItem) => `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`))
+        if (exploreState.editingRowId && !existingRowIdSet.has(exploreState.editingRowId)) {
+          exploreState.editingRowId = null
+          exploreState.editingName = ''
+        }
+        if (exploreState.renamingRowId && !existingRowIdSet.has(exploreState.renamingRowId)) {
+          exploreState.renamingRowId = null
+        }
       })
       return { isSuccess: true, messageText: 'loaded' }
     } catch (error: unknown) {
@@ -310,6 +354,48 @@ export class FileAccessPointStore {
     } finally {
       runInAction(() => {
         this.getExploreState(fileAccessPointId).isExploring = false
+      })
+    }
+  }
+
+  async requestRenameExploreItem(fileAccessPointId: string, targetPath: string, nextName: string, rowId: string) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    const state = this.getExploreState(fileAccessPointId)
+    if (state.renamingRowId) {
+      return { isSuccess: false, messageText: 'rename is in progress' }
+    }
+    const normalizedNextName = String(nextName || '').trim()
+    if (!normalizedNextName) {
+      return { isSuccess: false, messageText: 'name is required' }
+    }
+    runInAction(() => {
+      state.renamingRowId = rowId
+    })
+    try {
+      await requestAuthenticatedJson('/file-access-point/explore/rename', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId,
+          path: targetPath,
+          nextName: normalizedNextName,
+        }),
+      })
+      await this.requestExplore(state.path)
+      runInAction(() => {
+        state.editingRowId = null
+        state.editingName = ''
+      })
+      return { isSuccess: true, messageText: `renamed to ${normalizedNextName}` }
+    } catch (error: unknown) {
+      runInAction(() => {
+        this.errorText = String(error)
+      })
+      return { isSuccess: false, messageText: String(error) }
+    } finally {
+      runInAction(() => {
+        state.renamingRowId = null
       })
     }
   }
@@ -330,7 +416,7 @@ export class FileAccessPointStore {
 
   async requestZipStatus(taskId: string) {
     const params = new URLSearchParams({ taskId })
-    const data = await requestAuthenticatedJson(`/api/file-access-point/zip/status?${params.toString()}`)
+    const data = await requestAuthenticatedJson(`/file-access-point/zip/status?${params.toString()}`)
     return {
       status: String(data.status || ''),
       statusMessage: String(data.statusMessage || ''),
@@ -378,7 +464,7 @@ export class FileAccessPointStore {
 
   async requestDownloadZip(taskId: string) {
     const params = new URLSearchParams({ taskId })
-    const response = await requestAuthenticatedBlob(`/api/file-access-point/zip/download?${params.toString()}`)
+    const response = await requestAuthenticatedBlob(`/file-access-point/zip/download?${params.toString()}`)
     const blob = await response.blob()
     const downloadUrl = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -396,7 +482,7 @@ export class FileAccessPointStore {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const authToken = String(authStore.token || '')
     const wsUrl = `${protocol}//${window.location.host}${withAuthQuery(
-      resolveApiUrl(`/api/file-access-point/zip/ws/${encodeURIComponent(taskId)}`),
+      resolveApiUrl(`/file-access-point/zip/ws/${encodeURIComponent(taskId)}`),
       authToken,
     )}`
     const ws = new WebSocket(wsUrl)
@@ -482,7 +568,7 @@ export class FileAccessPointStore {
       this.zipStatusText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/api/file-access-point/zip/start', {
+      const data = await requestAuthenticatedJson('/file-access-point/zip/start', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
@@ -510,7 +596,7 @@ export class FileAccessPointStore {
       return { isSuccess: false, messageText: 'no zip task' }
     }
     try {
-      await requestAuthenticatedJson('/api/file-access-point/zip/abort', {
+      await requestAuthenticatedJson('/file-access-point/zip/abort', {
         method: 'POST',
         body: JSON.stringify({
           taskId: this.zipTaskId,

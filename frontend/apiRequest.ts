@@ -33,7 +33,19 @@ const parseJsonResponse = async (response: Response) => {
     return JSON.parse(responseText) as ApiResponse
   } catch (error: unknown) {
     const previewText = responseText.slice(0, 120).replace(/\s+/g, ' ')
-    throw new Error(`backend response is not JSON (status ${response.status}): ${previewText} | ${String(error)}`)
+    throw Object.assign(
+      new Error(`backend response is not JSON (status ${response.status}): ${previewText}`),
+      { cause: error },
+    )
+  }
+}
+
+const parseErrorMessage = (responseText: string) => {
+  try {
+    const body = JSON.parse(responseText) as ApiResponse
+    return String(body.message || responseText)
+  } catch (error: unknown) {
+    return responseText || String(error)
   }
 }
 
@@ -88,11 +100,7 @@ export async function requestAuthenticatedBlob(path: string, options: RequestIni
   }
   if (!response.ok) {
     const responseText = await response.text()
-    let errorMessage = responseText
-    try {
-      const body = JSON.parse(responseText) as ApiResponse
-      errorMessage = String(body.message || responseText)
-    } catch (_error) {}
+    const errorMessage = parseErrorMessage(responseText)
     throw new Error(errorMessage || `request failed: ${response.status}`)
   }
   return response

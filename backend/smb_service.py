@@ -5,7 +5,7 @@ from threading import Lock
 from time import time
 from typing import Any
 
-from smbclient import delete_session, open_file, register_session, scandir
+from smbclient import delete_session, open_file, register_session, rename, scandir
 from smbprotocol.exceptions import SMBAuthenticationError, SMBOSError
 
 
@@ -30,6 +30,27 @@ def build_unc_path(host: str, share: str, inner_path: str):
     if inner_segment:
         return f"\\\\{host}\\{normalized_share}\\{inner_segment}"
     return f"\\\\{host}\\{normalized_share}"
+
+
+def normalize_path(path_value: str):
+    normalized = str(path_value or "/").replace("\\", "/").strip()
+    if not normalized:
+        return "/"
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+    return normalized
+
+
+def split_parent_and_name(path_value: str):
+    normalized = normalize_path(path_value)
+    if normalized == "/":
+        return "/", ""
+    path_parts = [part for part in normalized.split("/") if part]
+    if len(path_parts) == 0:
+        return "/", ""
+    file_name = path_parts[-1]
+    parent_path = "/" + "/".join(path_parts[:-1]) if len(path_parts) > 1 else "/"
+    return parent_path, file_name
 
 
 @dataclass
@@ -132,6 +153,32 @@ class SmbConnectionManager:
             unc_path = build_unc_path(host, share, target_path)
             with open_file(unc_path, mode="rb") as file_obj:
                 return file_obj.read()
+
+    def rename_path(self, file_access_point_id: str, metadata: dict[str, Any], target_path: str, next_name: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            normalized_name = str(next_name or "").strip()
+            if not normalized_name:
+                raise RuntimeError("nextName is required")
+            if "/" in normalized_name or "\\" in normalized_name:
+                raise RuntimeError("nextName cannot include path separator")
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_path = normalize_path(target_path)
+            parent_path, old_name = split_parent_and_name(normalized_path)
+            if not old_name:
+                raise RuntimeError("cannot rename root path")
+            src_unc_path = build_unc_path(host, share, normalized_path)
+            dst_path = f"{parent_path.rstrip('/')}/{normalized_name}" if parent_path != "/" else f"/{normalized_name}"
+            dst_unc_path = build_unc_path(host, share, dst_path)
+            rename(src_unc_path, dst_unc_path)
+            return {
+                "path": normalized_path,
+                "nextPath": dst_path,
+                "oldName": old_name,
+                "nextName": normalized_name,
+            }
 
 
 smb_connection_manager = SmbConnectionManager()

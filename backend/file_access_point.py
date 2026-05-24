@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import queue
 import sys
+import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -19,7 +20,7 @@ if str(_CONFIG_DIR) not in sys.path:
 
 from config_loader import load_project_config
 from db import delete_db_file_access_point, get_dir_base, list_db_file_access_points, upsert_db_file_access_point
-from login import ZIP_ENCRYPTION_KEY
+from login import get_request_permission, get_request_zip_encryption_key, get_request_zip_timeout_seconds, has_request_permission
 from smb_service import smb_connection_manager
 from zip_task import create_zip_temp_path, sanitize_file_name, write_json_event, zip_task_manager
 
@@ -56,7 +57,13 @@ def _join_path(base_path: str, name: str):
     return f"{normalized_base}/{normalized_name}"
 
 
-def _build_zip_archive(task, file_access_point_id: str, metadata: dict[str, Any], target_path: str):
+def _build_zip_archive(
+    task,
+    file_access_point_id: str,
+    metadata: dict[str, Any],
+    target_path: str,
+    zip_encryption_key: str = "",
+):
     folder_name_raw = target_path.strip("/").split("/")[-1] or "root"
     folder_name = sanitize_file_name(folder_name_raw)
     zip_path = create_zip_temp_path(folder_name)
@@ -82,14 +89,18 @@ def _build_zip_archive(task, file_access_point_id: str, metadata: dict[str, Any]
             file_bytes = smb_connection_manager.read_file_bytes(file_access_point_id, metadata, child_path)
             zip_file.writestr(child_rel, file_bytes)
 
-    with pyzipper.AESZipFile(
-        zip_path,
-        mode="w",
-        compression=pyzipper.ZIP_DEFLATED,
-        encryption=pyzipper.WZ_AES,
-    ) as zip_file:
-        zip_file.setpassword(str(ZIP_ENCRYPTION_KEY or "").encode("utf-8"))
-        write_folder(target_path, zip_file, folder_name)
+    if zip_encryption_key:
+        with pyzipper.AESZipFile(
+            zip_path,
+            mode="w",
+            compression=pyzipper.ZIP_DEFLATED,
+            encryption=pyzipper.WZ_AES,
+        ) as zip_file:
+            zip_file.setpassword(str(zip_encryption_key).encode("utf-8"))
+            write_folder(target_path, zip_file, folder_name)
+    else:
+        with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+            write_folder(target_path, zip_file, folder_name)
     task.emit_log(f"zip ready {zip_path}")
     with task.lock:
         task.result_download_name = f"{folder_name}.zip"
@@ -165,6 +176,7 @@ def _load_all_file_access_points():
             "lastCheckUnixMs": state.last_check_unix_ms,
             "lastErrorText": state.last_error_text,
         }
+        item["permission"] = get_request_permission()
     return merged_list, database_error_text
 
 
@@ -200,8 +212,9 @@ def _find_file_access_point_by_id(file_access_point_id: str):
 
 def register_file_access_point_routes(app, sock, make_json_response, validate_auth_token):
     @app.get("/file-access-point/list")
-    @app.get("/api/file-access-point/list")
     def file_access_point_list():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         item_list, database_error_text = _load_all_file_access_points()
         return make_json_response(
             0,
@@ -213,8 +226,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         )
 
     @app.post("/file-access-point/create")
-    @app.post("/api/file-access-point/create")
     def file_access_point_create():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
         body = request.get_json(silent=True) or {}
         name = _to_text(body.get("name"))
         metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
@@ -223,14 +237,15 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         return make_json_response(0, data=create_result)
 
     @app.post("/file-access-point/update")
-    @app.post("/api/file-access-point/update")
     def file_access_point_update():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         if not file_access_point_id:
             return make_json_response(-1, message="fileAccessPointId is required"), 400
         if file_access_point_id.startswith("config:"):
-            return make_json_response(-1, message="config file access point cannot be updated by api"), 400
+            return make_json_response(-1, message="config file access point cannot be updated"), 400
         name = _to_text(body.get("name"))
         metadata = body.get("metadata") if isinstance(body.get("metadata"), dict) else {}
         normalized_metadata = _normalize_metadata(metadata)
@@ -239,8 +254,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         return make_json_response(0, data=update_result)
 
     @app.post("/file-access-point/delete")
-    @app.post("/api/file-access-point/delete")
     def file_access_point_delete():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         if not file_access_point_id:
@@ -254,8 +270,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         return make_json_response(0, data=delete_result)
 
     @app.post("/file-access-point/connection/check")
-    @app.post("/api/file-access-point/connection/check")
     def file_access_point_connection_check():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         current_item = _find_file_access_point_by_id(file_access_point_id)
@@ -281,8 +298,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
             return make_json_response(-1, message=str(error)), 500
 
     @app.post("/file-access-point/connection/reconnect")
-    @app.post("/api/file-access-point/connection/reconnect")
     def file_access_point_connection_reconnect():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         current_item = _find_file_access_point_by_id(file_access_point_id)
@@ -308,10 +326,10 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
             return make_json_response(-1, message=str(error)), 500
 
     @app.get("/file-access-point/explore/list")
-    @app.get("/api/file-access-point/explore/list")
     @app.post("/file-access-point/explore/list")
-    @app.post("/api/file-access-point/explore/list")
     def file_access_point_explore_list():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId") or request.args.get("fileAccessPointId"))
         target_path = _normalize_path(body.get("path") or request.args.get("path"))
@@ -337,10 +355,10 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
             return make_json_response(-1, message=str(error)), 500
 
     @app.get("/file-access-point/explore/download")
-    @app.get("/api/file-access-point/explore/download")
     @app.post("/file-access-point/explore/download")
-    @app.post("/api/file-access-point/explore/download")
     def file_access_point_explore_download():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId") or request.args.get("fileAccessPointId"))
         target_path = _normalize_path(body.get("path") or request.args.get("path"))
@@ -366,9 +384,37 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
+    @app.post("/file-access-point/explore/rename")
+    def file_access_point_explore_rename():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId"))
+        target_path = _normalize_path(body.get("path"))
+        next_name = _to_text(body.get("nextName"))
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            rename_result = smb_connection_manager.rename_path(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+                next_name,
+            )
+            return make_json_response(0, data=rename_result)
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
     @app.post("/file-access-point/zip/start")
-    @app.post("/api/file-access-point/zip/start")
     def file_access_point_zip_start():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         target_path = _normalize_path(body.get("path"))
@@ -380,6 +426,8 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                 -1,
                 message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
             ), 400
+        zip_encryption_key = get_request_zip_encryption_key()
+        zip_timeout_seconds = get_request_zip_timeout_seconds()
         task = zip_task_manager.create_task()
         zip_task_manager.start_task(
             task,
@@ -388,7 +436,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                 file_access_point_id,
                 current_item["metadata"],
                 target_path,
+                zip_encryption_key,
             ),
+            timeout_seconds=zip_timeout_seconds,
         )
         return make_json_response(
             0,
@@ -398,8 +448,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         )
 
     @app.post("/file-access-point/zip/abort")
-    @app.post("/api/file-access-point/zip/abort")
     def file_access_point_zip_abort():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         body = request.get_json(silent=True) or {}
         task_id = _to_text(body.get("taskId"))
         task = zip_task_manager.abort_task(task_id)
@@ -414,8 +465,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         )
 
     @app.get("/file-access-point/zip/download")
-    @app.get("/api/file-access-point/zip/download")
     def file_access_point_zip_download():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         task_id = _to_text(request.args.get("taskId"))
         task = zip_task_manager.get_task(task_id)
         if task is None:
@@ -435,8 +487,9 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         )
 
     @app.get("/file-access-point/zip/status")
-    @app.get("/api/file-access-point/zip/status")
     def file_access_point_zip_status():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
         task_id = _to_text(request.args.get("taskId"))
         task = zip_task_manager.get_task(task_id)
         if task is None:
@@ -452,7 +505,7 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                 },
             )
 
-    @sock.route("/api/file-access-point/zip/ws/<task_id>")
+    @sock.route("/file-access-point/zip/ws/<task_id>")
     def file_access_point_zip_ws(ws, task_id: str):
         auth_token = _to_text(request.args.get("authToken"))
         if not validate_auth_token(auth_token):
@@ -462,6 +515,16 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                     "type": "status",
                     "status": "failed",
                     "messageText": "unauthorized websocket",
+                },
+            )
+            return
+        if not has_request_permission("R"):
+            write_json_event(
+                ws,
+                {
+                    "type": "status",
+                    "status": "failed",
+                    "messageText": "read permission required",
                 },
             )
             return

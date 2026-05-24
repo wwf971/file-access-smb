@@ -1,3 +1,6 @@
 config.0.*
 node_modules/
 /script/
+
+build/*
+deploy/*

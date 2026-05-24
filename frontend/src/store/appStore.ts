@@ -24,7 +24,7 @@ class AppStore {
   }
 
   async bootstrap() {
-    await requestAuthenticatedJson('/api/login/check')
+    await requestAuthenticatedJson('/login/check')
     await Promise.all([serviceStore.requestPing(), serviceStore.requestDatabaseInfo()])
     await fileAccessPointStore.requestLoadList()
   }

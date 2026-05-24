@@ -1,8 +1,14 @@
 # this file contains example config data
 auth:
-  login_username: example
-  login_password: example_password
-  zip_encryption_key: example_zip_key
+  users:
+    - username: example_rw
+      password: example_password
+      permission: RW
+      zip_encryption_key: example_zip_key
+      zip_timeout: 60 # unit: second
+    - username: example_r
+      password: example_read_password
+      permission: R
 
 config_databases:
   local:

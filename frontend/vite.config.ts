@@ -20,10 +20,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
+      '/file-access-point': {
         target: 'http://127.0.0.1:9400',
         changeOrigin: true,
         ws: true,
+      },
+      '/login': {
+        target: 'http://127.0.0.1:9400',
+        changeOrigin: true,
       },
       '/health': {
         target: 'http://127.0.0.1:9400',
