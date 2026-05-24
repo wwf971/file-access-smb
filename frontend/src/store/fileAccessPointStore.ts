@@ -40,6 +40,9 @@ type ExploreState = {
   renamingRowId: string | null
 }
 
+export const TEXT_EDITOR_WARN_SIZE_BYTES = 512 * 1024
+export const TEXT_EDITOR_MAX_SIZE_BYTES = 2 * 1024 * 1024
+
 export class FileAccessPointStore {
   isListLoading = false
   isSaving = false
@@ -56,6 +59,20 @@ export class FileAccessPointStore {
   zipStatusText = ''
   zipWebSocket: null | WebSocket = null
   zipStatusPollingTimer: null | number = null
+  isTextEditorOpen = false
+  isTextEditorLoading = false
+  isTextEditorSaving = false
+  isMarkdownPreviewVisible = false
+  textEditorFileAccessPointId = ''
+  textEditorPath = ''
+  textEditorContent = ''
+  textEditorOriginalContent = ''
+  textEditorBackupPath = ''
+  textEditorErrorText = ''
+  textEditorStatusText = ''
+  textEditorSizeBytes = 0
+  textEditorMaxSizeBytes = TEXT_EDITOR_MAX_SIZE_BYTES
+  isTextEditorDecodeLossy = false
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true })
@@ -71,6 +88,15 @@ export class FileAccessPointStore {
 
   get canWrite() {
     return String(authStore.permission || '').toUpperCase().includes('W')
+  }
+
+  get isTextEditorDirty() {
+    return this.textEditorContent !== this.textEditorOriginalContent
+  }
+
+  get isTextEditorMarkdown() {
+    const path = this.textEditorPath.toLowerCase()
+    return path.endsWith('.md') || path.endsWith('.markdown')
   }
 
   createExploreState() {
@@ -109,6 +135,27 @@ export class FileAccessPointStore {
   setExploreEditingName(fileAccessPointId: string, editingName: string) {
     const state = this.getExploreState(fileAccessPointId)
     state.editingName = editingName
+  }
+
+  setTextEditorContent(content: string) {
+    this.textEditorContent = content
+  }
+
+  closeTextEditor() {
+    this.isTextEditorOpen = false
+    this.isMarkdownPreviewVisible = false
+    this.textEditorPath = ''
+    this.textEditorContent = ''
+    this.textEditorOriginalContent = ''
+    this.textEditorBackupPath = ''
+    this.textEditorErrorText = ''
+    this.textEditorStatusText = ''
+    this.textEditorSizeBytes = 0
+    this.isTextEditorDecodeLossy = false
+  }
+
+  toggleMarkdownPreview() {
+    this.isMarkdownPreviewVisible = !this.isMarkdownPreviewVisible
   }
 
   setSelected(id: string, panel: 'config' | 'explore') {
@@ -397,6 +444,126 @@ export class FileAccessPointStore {
       runInAction(() => {
         state.renamingRowId = null
       })
+    }
+  }
+
+  async requestOpenTextEditor(fileAccessPointId: string, targetPath: string) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    if (this.isTextEditorLoading || this.isTextEditorSaving) {
+      return { isSuccess: false, messageText: 'text editor is busy' }
+    }
+    runInAction(() => {
+      this.isTextEditorLoading = true
+      this.textEditorErrorText = ''
+      this.textEditorStatusText = 'creating backup'
+    })
+    try {
+      const data = await requestAuthenticatedJson('/file-access-point/explore/text/open', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId,
+          path: targetPath,
+        }),
+      })
+      const content = String(data.content || '')
+      const path = String(data.path || targetPath)
+      runInAction(() => {
+        this.isTextEditorOpen = true
+        this.textEditorFileAccessPointId = fileAccessPointId
+        this.textEditorPath = path
+        this.textEditorContent = content
+        this.textEditorOriginalContent = content
+        this.textEditorBackupPath = String(data.backupPath || '')
+        this.textEditorSizeBytes = Number(data.sizeBytes || 0)
+        this.textEditorMaxSizeBytes = Number(data.maxSizeBytes || TEXT_EDITOR_MAX_SIZE_BYTES)
+        this.isTextEditorDecodeLossy = data.isDecodeLossy === true
+        this.isMarkdownPreviewVisible = path.toLowerCase().endsWith('.md') || path.toLowerCase().endsWith('.markdown')
+        this.textEditorStatusText = this.textEditorBackupPath ? `backup created: ${this.textEditorBackupPath}` : 'loaded'
+      })
+      return { isSuccess: true, messageText: 'opened' }
+    } catch (error: unknown) {
+      const messageText = String(error)
+      runInAction(() => {
+        this.textEditorErrorText = messageText
+        this.textEditorStatusText = ''
+      })
+      return { isSuccess: false, messageText }
+    } finally {
+      runInAction(() => {
+        this.isTextEditorLoading = false
+      })
+    }
+  }
+
+  async requestSaveTextEditor() {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    if (this.isTextEditorSaving || this.isTextEditorLoading) {
+      return { isSuccess: false, messageText: 'text editor is busy' }
+    }
+    if (!this.textEditorFileAccessPointId || !this.textEditorPath) {
+      return { isSuccess: false, messageText: 'no text file is open' }
+    }
+    runInAction(() => {
+      this.isTextEditorSaving = true
+      this.textEditorErrorText = ''
+      this.textEditorStatusText = 'saving'
+    })
+    try {
+      const data = await requestAuthenticatedJson('/file-access-point/explore/text/save', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId: this.textEditorFileAccessPointId,
+          path: this.textEditorPath,
+          content: this.textEditorContent,
+        }),
+      })
+      const content = String(data.content || '')
+      runInAction(() => {
+        this.textEditorContent = content
+        this.textEditorOriginalContent = content
+        this.textEditorSizeBytes = Number(data.sizeBytes || 0)
+        this.textEditorStatusText = 'saved'
+      })
+      return { isSuccess: true, messageText: 'saved' }
+    } catch (error: unknown) {
+      const messageText = String(error)
+      runInAction(() => {
+        this.textEditorErrorText = messageText
+        this.textEditorStatusText = ''
+      })
+      return { isSuccess: false, messageText }
+    } finally {
+      runInAction(() => {
+        this.isTextEditorSaving = false
+      })
+    }
+  }
+
+  async requestCleanTextBackups(folderPath: string) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    if (!this.selectedItem) {
+      return { isSuccess: false, messageText: 'busy or no selection' }
+    }
+    try {
+      const data = await requestAuthenticatedJson('/file-access-point/explore/text/clean-bak', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId: this.selectedItem.fileAccessPointId,
+          path: folderPath,
+        }),
+      })
+      return {
+        isSuccess: true,
+        messageText: `removed ${Number(data.removedCount || 0)} backup files`,
+      }
+    } catch (error: unknown) {
+      return { isSuccess: false, messageText: String(error) }
     }
   }
 

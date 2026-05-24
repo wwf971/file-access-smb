@@ -4,6 +4,7 @@ import { Login, SpinningCircle } from '@wwf971/react-comp-misc'
 import './App.css'
 import ResourceTree from './ResourceTree'
 import ResourcePanel from './ResourcePanel'
+import EditorTxt from './fileAccessPoint/EditorTxt'
 import { appStore } from './store/appStore'
 import { authStore } from './store/authStore'
 import { fileAccessPointStore } from './store/fileAccessPointStore'
@@ -71,6 +72,7 @@ const App = observer(() => {
           </div>
         </div>
       ) : null}
+      <EditorTxt />
     </div>
   )
 })

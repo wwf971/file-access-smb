@@ -1,6 +1,6 @@
 # file-access-smb
 
-A Web-based SMB network disk explorer, with a simple login authentication feature.
+SMB network disk access service that does not require having the SMB disks mounted locally, by directly accessing them. The service comes with a simple login authentication feature.
 
 - backend: Flask + `smbprotocol` (`smbclient`)
 - frontend: Vite + React + MobX

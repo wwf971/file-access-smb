@@ -2,7 +2,11 @@ import React, { useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { requestAuthenticatedBlob } from '../../apiRequest'
 import { FolderView, MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
-import { fileAccessPointStore } from '../store/fileAccessPointStore'
+import {
+  fileAccessPointStore,
+  TEXT_EDITOR_MAX_SIZE_BYTES,
+  TEXT_EDITOR_WARN_SIZE_BYTES,
+} from '../store/fileAccessPointStore'
 
 function buildParentPath(path: string) {
   const normalized = String(path || '/')
@@ -23,6 +27,111 @@ function buildParentPath(path: string) {
 function buildNextPath(currentPath: string, itemName: string) {
   const base = currentPath === '/' ? '' : currentPath
   return `${base}/${itemName}`
+}
+
+const TEXT_EDITOR_ALLOWED_SUFFIX_SET = new Set([
+  '.txt',
+  '.md',
+  '.markdown',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.json',
+  '.yaml',
+  '.yml',
+  '.css',
+  '.html',
+  '.xml',
+  '.csv',
+  '.log',
+  '.py',
+  '.sh',
+  '.toml',
+  '.ini',
+  '.conf',
+])
+
+const TEXT_EDITOR_ALLOWED_NAME_SET = new Set([
+  '.env',
+  '.gitignore',
+  'makefile',
+])
+
+const TEXT_EDITOR_BLOCKED_SUFFIX_SET = new Set([
+  '.pdf',
+  '.exe',
+  '.dll',
+  '.so',
+  '.dylib',
+  '.zip',
+  '.7z',
+  '.rar',
+  '.tar',
+  '.gz',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.mp3',
+  '.mp4',
+  '.avi',
+  '.mov',
+  '.bin',
+  '.db',
+  '.sqlite',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.class',
+  '.jar',
+])
+
+function getFileSuffix(fileName: string) {
+  const lowerName = String(fileName || '').toLowerCase()
+  const dotIndex = lowerName.lastIndexOf('.')
+  if (dotIndex <= 0) {
+    return ''
+  }
+  return lowerName.slice(dotIndex)
+}
+
+function buildTextEditorCheck(fileName: string, sizeBytes: number) {
+  const lowerName = String(fileName || '').toLowerCase()
+  const suffix = getFileSuffix(lowerName)
+  const warningTextList = []
+  if (TEXT_EDITOR_BLOCKED_SUFFIX_SET.has(suffix)) {
+    return {
+      status: 'error',
+      messageText: `This file type is blocked for text editing: ${suffix}`,
+    }
+  }
+  if (sizeBytes > TEXT_EDITOR_MAX_SIZE_BYTES) {
+    return {
+      status: 'error',
+      messageText: `This file is too large for text editing: ${sizeBytes} bytes`,
+    }
+  }
+  if (!TEXT_EDITOR_ALLOWED_SUFFIX_SET.has(suffix) && !TEXT_EDITOR_ALLOWED_NAME_SET.has(lowerName)) {
+    warningTextList.push('This file suffix is not in the known text list.')
+  }
+  if (sizeBytes > TEXT_EDITOR_WARN_SIZE_BYTES) {
+    warningTextList.push(`This file is larger than ${TEXT_EDITOR_WARN_SIZE_BYTES} bytes.`)
+  }
+  if (warningTextList.length > 0) {
+    return {
+      status: 'warning',
+      messageText: warningTextList.join(' '),
+    }
+  }
+  return {
+    status: 'ok',
+    messageText: '',
+  }
 }
 
 const FOLDER_COLUMNS = {
@@ -76,42 +185,40 @@ const NameCell = ({
 
   return (
     <div className={`explore-name-cell ${isRowLocked ? 'is-locked' : ''}`}>
-      {isEditing ? (
-        <div
-          ref={editRef}
-          className="explore-name-edit"
-          contentEditable={true}
-          suppressContentEditableWarning={true}
-          onBlur={(event) => {
+      <div
+        ref={editRef}
+        className={`explore-name-content ${isEditing ? 'is-editing' : ''}`}
+        contentEditable={isEditing}
+        suppressContentEditableWarning={true}
+        onDoubleClick={() => {
+          if (isRowLocked) {
+            return
+          }
+          onStartEditing()
+        }}
+        onBlur={(event) => {
+          if (!isEditing) {
+            return
+          }
+          onCommitEditing(String(event.currentTarget.textContent || '').trim())
+        }}
+        onKeyDown={(event) => {
+          if (!isEditing) {
+            return
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
             onCommitEditing(String(event.currentTarget.textContent || '').trim())
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              onCommitEditing(String(event.currentTarget.textContent || '').trim())
-              return
-            }
-            if (event.key === 'Escape') {
-              event.preventDefault()
-              onCancelEditing()
-            }
-          }}
-        >
-          {name}
-        </div>
-      ) : (
-        <div
-          className="explore-name-text"
-          onDoubleClick={() => {
-            if (isRowLocked) {
-              return
-            }
-            onStartEditing()
-          }}
-        >
-          {name}
-        </div>
-      )}
+            return
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onCancelEditing()
+          }
+        }}
+      >
+        {name}
+      </div>
       {isRenaming ? (
         <span className="explore-name-spinner">
           <SpinningCircle width={12} height={12} />
@@ -135,6 +242,15 @@ const FileExplorePanel = observer(() => {
   }>({
     position: null,
     rowId: null,
+  })
+  const [textOpenDialogState, setTextOpenDialogState] = useState<{
+    status: 'idle' | 'warning' | 'error'
+    messageText: string
+    targetPath: string
+  }>({
+    status: 'idle',
+    messageText: '',
+    targetPath: '',
   })
 
   const runExplore = async (path: string) => {
@@ -200,6 +316,71 @@ const FileExplorePanel = observer(() => {
         status: 'error',
         messageText: String(error),
       })
+    }
+  }
+
+  const runOpenTextEditor = async (targetPath: string) => {
+    if (!item) {
+      return
+    }
+    setMessageState({
+      status: 'loading',
+      messageText: `Opening text editor: ${targetPath}`,
+    })
+    const result = await fileAccessPointStore.requestOpenTextEditor(item.fileAccessPointId, targetPath)
+    setMessageState({
+      status: result?.isSuccess ? 'success' : 'error',
+      messageText: result?.messageText || '',
+    })
+    if (!result?.isSuccess) {
+      setTextOpenDialogState({
+        status: 'error',
+        messageText: result?.messageText || 'failed to open text editor',
+        targetPath: '',
+      })
+    }
+  }
+
+  const requestOpenTextEditorWithCheck = (exploreItem: { name: string, isDirectory: boolean, sizeBytes: number }) => {
+    if (!exploreState || exploreItem.isDirectory) {
+      return
+    }
+    const targetPath = buildNextPath(exploreState.path || '/', exploreItem.name)
+    const checkResult = buildTextEditorCheck(exploreItem.name, exploreItem.sizeBytes)
+    if (checkResult.status === 'error') {
+      setTextOpenDialogState({
+        status: 'error',
+        messageText: checkResult.messageText,
+        targetPath: '',
+      })
+      return
+    }
+    if (checkResult.status === 'warning') {
+      setTextOpenDialogState({
+        status: 'warning',
+        messageText: checkResult.messageText,
+        targetPath,
+      })
+      return
+    }
+    runOpenTextEditor(targetPath)
+  }
+
+  const runCleanBackupFiles = async () => {
+    if (!exploreState) {
+      return
+    }
+    setMessageState({
+      status: 'loading',
+      messageText: `Cleaning backup files: ${exploreState.path}`,
+    })
+    const result = await fileAccessPointStore.requestCleanTextBackups(exploreState.path || '/')
+    setMessageState({
+      status: result?.isSuccess ? 'success' : 'error',
+      messageText: result?.messageText || '',
+    })
+    if (result?.isSuccess) {
+      runExplore(exploreState.path || '/')
     }
   }
 
@@ -381,6 +562,12 @@ const FileExplorePanel = observer(() => {
             },
             {
               type: 'item',
+              name: 'Open Text',
+              data: { action: 'open-text' },
+              disabled: !canWrite || !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId) || fileAccessPointStore.isTextEditorLoading || fileAccessPointStore.isTextEditorSaving,
+            },
+            {
+              type: 'item',
               name: 'Download Zip',
               data: { action: 'download-zip' },
               disabled: !contextMenuState.rowId?.startsWith('d:') || fileAccessPointStore.isZipRunning || Boolean(exploreState?.renamingRowId),
@@ -396,6 +583,12 @@ const FileExplorePanel = observer(() => {
               name: 'Rename',
               data: { action: 'rename' },
               disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+            },
+            {
+              type: 'item',
+              name: 'Clean Bak Files',
+              data: { action: 'clean-bak' },
+              disabled: !canWrite || Boolean(exploreState?.renamingRowId) || fileAccessPointStore.isTextEditorLoading || fileAccessPointStore.isTextEditorSaving,
             },
           ]}
           position={contextMenuState.position}
@@ -420,6 +613,9 @@ const FileExplorePanel = observer(() => {
             if (menuItem?.data?.action === 'download' && !exploreItem.isDirectory) {
               runDownload(buildNextPath(exploreState?.path || '/', exploreItem.name))
             }
+            if (menuItem?.data?.action === 'open-text' && !exploreItem.isDirectory) {
+              requestOpenTextEditorWithCheck(exploreItem)
+            }
             if (menuItem?.data?.action === 'download-zip' && exploreItem.isDirectory) {
               fileAccessPointStore.requestStartZip(buildNextPath(exploreState?.path || '/', exploreItem.name))
             }
@@ -427,8 +623,53 @@ const FileExplorePanel = observer(() => {
               const rowId = contextMenuState.rowId || ''
               fileAccessPointStore.setExploreEditingRow(item.fileAccessPointId, rowId, exploreItem.name)
             }
+            if (menuItem?.data?.action === 'clean-bak' && canWrite) {
+              runCleanBackupFiles()
+            }
           }}
         />
+      ) : null}
+      {textOpenDialogState.status !== 'idle' ? (
+        <div className="text-editor-notice-overlay">
+          <div className={`text-editor-notice-popup status-${textOpenDialogState.status}`}>
+            <div className="text-editor-notice-title">
+              {textOpenDialogState.status === 'warning' ? 'Open text warning' : 'Open text error'}
+            </div>
+            <div className="text-editor-notice-message">{textOpenDialogState.messageText}</div>
+            <div className="text-editor-notice-actions">
+              {textOpenDialogState.status === 'warning' ? (
+                <button
+                  type="button"
+                  className="main-btn"
+                  onClick={() => {
+                    const targetPath = textOpenDialogState.targetPath
+                    setTextOpenDialogState({
+                      status: 'idle',
+                      messageText: '',
+                      targetPath: '',
+                    })
+                    runOpenTextEditor(targetPath)
+                  }}
+                >
+                  continue
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="main-btn"
+                onClick={() => {
+                  setTextOpenDialogState({
+                    status: 'idle',
+                    messageText: '',
+                    targetPath: '',
+                  })
+                }}
+              >
+                close
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )

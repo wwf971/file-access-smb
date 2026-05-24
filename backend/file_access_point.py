@@ -24,6 +24,8 @@ from login import get_request_permission, get_request_zip_encryption_key, get_re
 from smb_service import smb_connection_manager
 from zip_task import create_zip_temp_path, sanitize_file_name, write_json_event, zip_task_manager
 
+TEXT_EDITOR_MAX_SIZE_BYTES = 2 * 1024 * 1024
+
 
 def _to_text(value: Any):
     return str(value or "").strip()
@@ -408,6 +410,111 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                 next_name,
             )
             return make_json_response(0, data=rename_result)
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
+    @app.post("/file-access-point/explore/text/open")
+    def file_access_point_explore_text_open():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId"))
+        target_path = _normalize_path(body.get("path"))
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            backup_result = smb_connection_manager.create_backup_file(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+                max_size_bytes=TEXT_EDITOR_MAX_SIZE_BYTES,
+            )
+            file_bytes = smb_connection_manager.read_file_bytes(file_access_point_id, current_item["metadata"], target_path)
+            is_decode_lossy = False
+            try:
+                content_text = file_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                content_text = file_bytes.decode("utf-8", errors="replace")
+                is_decode_lossy = True
+            return make_json_response(
+                0,
+                data={
+                    "fileAccessPointId": file_access_point_id,
+                    "path": target_path,
+                    "content": content_text,
+                    "sizeBytes": len(file_bytes),
+                    "backupPath": backup_result["backupPath"],
+                    "isDecodeLossy": is_decode_lossy,
+                    "maxSizeBytes": TEXT_EDITOR_MAX_SIZE_BYTES,
+                },
+            )
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
+    @app.post("/file-access-point/explore/text/save")
+    def file_access_point_explore_text_save():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId"))
+        target_path = _normalize_path(body.get("path"))
+        content = str(body.get("content") or "")
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            file_bytes = content.encode("utf-8")
+            if len(file_bytes) > TEXT_EDITOR_MAX_SIZE_BYTES:
+                return make_json_response(-1, message=f"file is too large for text editor: {len(file_bytes)} bytes"), 400
+            save_result = smb_connection_manager.write_file_bytes(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+                file_bytes,
+            )
+            return make_json_response(
+                0,
+                data={
+                    **save_result,
+                    "content": content,
+                },
+            )
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
+    @app.post("/file-access-point/explore/text/clean-bak")
+    def file_access_point_explore_text_clean_bak():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId"))
+        target_path = _normalize_path(body.get("path"))
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            clean_result = smb_connection_manager.clean_backup_files(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+            )
+            return make_json_response(0, data=clean_result)
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 

@@ -4,3 +4,7 @@ node_modules/
 
 build/*
 deploy/*
+/.runtime/*
+
+**/*.pyc
+**/__pycache__/
