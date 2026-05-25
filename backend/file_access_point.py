@@ -413,6 +413,48 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
+    @app.post("/file-access-point/explore/upload")
+    def file_access_point_explore_upload():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        file_access_point_id = _to_text(request.form.get("fileAccessPointId"))
+        target_path = _normalize_path(request.form.get("path"))
+        upload_name = _to_text(request.form.get("uploadName"))
+        file_obj = request.files.get("file")
+        if file_obj is None:
+            return make_json_response(-1, message="file is required"), 400
+        if not upload_name:
+            upload_name = _to_text(file_obj.filename)
+        if not upload_name:
+            return make_json_response(-1, message="uploadName is required"), 400
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            file_bytes = file_obj.read()
+            upload_result = smb_connection_manager.write_new_file_bytes(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+                upload_name,
+                file_bytes,
+            )
+            return make_json_response(
+                0,
+                data={
+                    "fileAccessPointId": file_access_point_id,
+                    "folderPath": target_path,
+                    **upload_result,
+                },
+            )
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
     @app.post("/file-access-point/explore/text/open")
     def file_access_point_explore_text_open():
         if not has_request_permission("W"):
@@ -450,6 +492,8 @@ def register_file_access_point_routes(app, sock, make_json_response, validate_au
                     "content": content_text,
                     "sizeBytes": len(file_bytes),
                     "backupPath": backup_result["backupPath"],
+                    "backupName": backup_result["backupName"],
+                    "backupSizeBytes": backup_result["sizeBytes"],
                     "isDecodeLossy": is_decode_lossy,
                     "maxSizeBytes": TEXT_EDITOR_MAX_SIZE_BYTES,
                 },

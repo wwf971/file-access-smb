@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import { requestAuthenticatedBlob } from '../../apiRequest'
 import { FolderView, MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
 import {
   fileAccessPointStore,
@@ -288,28 +287,10 @@ const FileExplorePanel = observer(() => {
       messageText: `Downloading: ${targetPath}`,
     })
     try {
-      const response = await requestAuthenticatedBlob('/file-access-point/explore/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileAccessPointId: item.fileAccessPointId,
-          path: targetPath,
-        }),
-      })
-      const blob = await response.blob()
-      const downloadUrl = URL.createObjectURL(blob)
-      const anchor = document.createElement('a')
-      anchor.href = downloadUrl
-      anchor.download = targetPath.split('/').filter((part) => part).pop() || 'download.bin'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      URL.revokeObjectURL(downloadUrl)
+      const result = await fileAccessPointStore.requestDownloadExploreFile(item.fileAccessPointId, targetPath)
       setMessageState({
-        status: 'success',
-        messageText: `Downloaded: ${targetPath}`,
+        status: result?.isSuccess ? 'success' : 'error',
+        messageText: result?.messageText || '',
       })
     } catch (error: unknown) {
       setMessageState({
@@ -379,9 +360,6 @@ const FileExplorePanel = observer(() => {
       status: result?.isSuccess ? 'success' : 'error',
       messageText: result?.messageText || '',
     })
-    if (result?.isSuccess) {
-      runExplore(exploreState.path || '/')
-    }
   }
 
   if (!item) {
@@ -509,6 +487,23 @@ const FileExplorePanel = observer(() => {
           }}
         >
           up
+        </button>
+        <button
+          type="button"
+          className="main-btn"
+          disabled={!canWrite || exploreState?.isExploring || fileAccessPointStore.isUploadPopupOpen}
+          onClick={() => {
+            if (!item) {
+              return
+            }
+            const result = fileAccessPointStore.openUploadPopup(item.fileAccessPointId, exploreState?.path || '/')
+            setMessageState({
+              status: result?.isSuccess ? 'success' : 'error',
+              messageText: result?.messageText || '',
+            })
+          }}
+        >
+          upload
         </button>
       </div>
       <div className="list-wrap">

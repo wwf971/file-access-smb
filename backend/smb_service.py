@@ -190,6 +190,43 @@ class SmbConnectionManager:
                 "sizeBytes": len(file_bytes),
             }
 
+    def write_new_file_bytes(
+        self,
+        file_access_point_id: str,
+        metadata: dict[str, Any],
+        folder_path: str,
+        file_name: str,
+        file_bytes: bytes,
+    ):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            normalized_name = str(file_name or "").strip()
+            if not normalized_name:
+                raise RuntimeError("file name is required")
+            if "/" in normalized_name or "\\" in normalized_name:
+                raise RuntimeError("file name cannot include path separator")
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_folder_path = normalize_path(folder_path)
+            folder_unc_path = build_unc_path(host, share, normalized_folder_path)
+            existing_name_set = {str(entry.name) for entry in scandir(folder_unc_path)}
+            if normalized_name in existing_name_set:
+                raise RuntimeError(f"file already exists: {normalized_name}")
+            target_path = (
+                f"{normalized_folder_path.rstrip('/')}/{normalized_name}"
+                if normalized_folder_path != "/"
+                else f"/{normalized_name}"
+            )
+            target_unc_path = build_unc_path(host, share, target_path)
+            with open_file(target_unc_path, mode="wb") as file_obj:
+                file_obj.write(file_bytes)
+            return {
+                "path": target_path,
+                "name": normalized_name,
+                "sizeBytes": len(file_bytes),
+            }
+
     def create_backup_file(
         self,
         file_access_point_id: str,

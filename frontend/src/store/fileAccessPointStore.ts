@@ -40,8 +40,69 @@ type ExploreState = {
   renamingRowId: string | null
 }
 
+export type UploadFileStatus = 'to-upload' | 'uploading' | 'success' | 'error'
+
+export type UploadFileItem = {
+  itemId: string
+  file: File
+  fileName: string
+  uploadName: string
+  sizeBytes: number
+  status: UploadFileStatus
+  progressPercent: number
+  isBackendProcessing: boolean
+  errorText: string
+}
+
+export type UploadTaskState = {
+  taskId: string
+  fileAccessPointId: string
+  folderPath: string
+  items: UploadFileItem[]
+  selectedRowIds: string[]
+  isUploading: boolean
+  messageText: string
+  errorText: string
+}
+
 export const TEXT_EDITOR_WARN_SIZE_BYTES = 512 * 1024
 export const TEXT_EDITOR_MAX_SIZE_BYTES = 2 * 1024 * 1024
+
+const UPLOAD_TASK_ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
+
+function createUploadTaskId() {
+  let value = ''
+  for (let index = 0; index < 12; index += 1) {
+    value += UPLOAD_TASK_ID_ALPHABET[Math.floor(Math.random() * UPLOAD_TASK_ID_ALPHABET.length)]
+  }
+  return value
+}
+
+function buildParentPath(path: string) {
+  const normalized = String(path || '/')
+  if (normalized === '/' || normalized === '') {
+    return '/'
+  }
+  const parts = normalized.split('/').filter((item) => item)
+  parts.pop()
+  if (parts.length === 0) {
+    return '/'
+  }
+  return `/${parts.join('/')}`
+}
+
+function getPathName(path: string) {
+  return String(path || '').split('/').filter((part) => part).pop() || ''
+}
+
+function sortExploreItems(items: ExploreItem[]) {
+  items.sort((itemA, itemB) => {
+    if (itemA.isDirectory !== itemB.isDirectory) {
+      return itemA.isDirectory ? -1 : 1
+    }
+    return itemA.name.localeCompare(itemB.name)
+  })
+}
 
 export class FileAccessPointStore {
   isListLoading = false
@@ -59,6 +120,8 @@ export class FileAccessPointStore {
   zipStatusText = ''
   zipWebSocket: null | WebSocket = null
   zipStatusPollingTimer: null | number = null
+  currentUploadTaskId = ''
+  uploadTaskById: Record<string, UploadTaskState> = {}
   isTextEditorOpen = false
   isTextEditorLoading = false
   isTextEditorSaving = false
@@ -99,6 +162,17 @@ export class FileAccessPointStore {
     return path.endsWith('.md') || path.endsWith('.markdown')
   }
 
+  get currentUploadTask() {
+    if (!this.currentUploadTaskId) {
+      return null
+    }
+    return this.uploadTaskById[this.currentUploadTaskId] || null
+  }
+
+  get isUploadPopupOpen() {
+    return this.currentUploadTask !== null
+  }
+
   createExploreState() {
     return {
       path: '/',
@@ -135,6 +209,264 @@ export class FileAccessPointStore {
   setExploreEditingName(fileAccessPointId: string, editingName: string) {
     const state = this.getExploreState(fileAccessPointId)
     state.editingName = editingName
+  }
+
+  addExploreFileItemIfCurrent(fileAccessPointId: string, folderPath: string, name: string, sizeBytes: number) {
+    const state = this.getExploreState(fileAccessPointId)
+    if (state.path !== folderPath || !name) {
+      return
+    }
+    const existingItem = state.items.find((item) => !item.isDirectory && item.name === name)
+    if (existingItem) {
+      existingItem.sizeBytes = sizeBytes
+      return
+    }
+    state.items.push({
+      name,
+      isDirectory: false,
+      sizeBytes,
+    })
+    sortExploreItems(state.items)
+  }
+
+  removeExploreFileItemsIfCurrent(fileAccessPointId: string, folderPath: string, nameList: string[]) {
+    const state = this.getExploreState(fileAccessPointId)
+    if (state.path !== folderPath || nameList.length === 0) {
+      return
+    }
+    const nameSet = new Set(nameList)
+    state.items = state.items.filter((item) => item.isDirectory || !nameSet.has(item.name))
+  }
+
+  openUploadPopup(fileAccessPointId: string, folderPath: string) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    const taskId = createUploadTaskId()
+    this.uploadTaskById[taskId] = {
+      taskId,
+      fileAccessPointId,
+      folderPath: String(folderPath || '/'),
+      items: [],
+      selectedRowIds: [],
+      isUploading: false,
+      messageText: '',
+      errorText: '',
+    }
+    this.currentUploadTaskId = taskId
+    return { isSuccess: true, messageText: 'upload popup opened' }
+  }
+
+  closeUploadPopup() {
+    const task = this.currentUploadTask
+    if (task?.isUploading) {
+      return { isSuccess: false, messageText: 'upload is in progress' }
+    }
+    if (this.currentUploadTaskId) {
+      delete this.uploadTaskById[this.currentUploadTaskId]
+    }
+    this.currentUploadTaskId = ''
+    return { isSuccess: true, messageText: 'upload popup closed' }
+  }
+
+  addUploadFiles(fileList: File[] | FileList) {
+    const task = this.currentUploadTask
+    if (!task || task.isUploading) {
+      return
+    }
+    Array.from(fileList).forEach((file) => {
+      const itemId = createUploadTaskId()
+      task.items.push({
+        itemId,
+        file,
+        fileName: file.name,
+        uploadName: file.name,
+        sizeBytes: file.size,
+        status: 'to-upload',
+        progressPercent: 0,
+        isBackendProcessing: false,
+        errorText: '',
+      })
+    })
+    task.messageText = task.items.length > 0 ? `${task.items.length} file item(s) ready` : ''
+    task.errorText = ''
+  }
+
+  setUploadSelectedRowIds(rowIds: string[]) {
+    const task = this.currentUploadTask
+    if (!task) {
+      return
+    }
+    task.selectedRowIds = rowIds
+  }
+
+  setUploadItemName(itemId: string, uploadName: string) {
+    const task = this.currentUploadTask
+    const item = task?.items.find((entry) => entry.itemId === itemId)
+    if (!item || item.status === 'uploading' || item.status === 'success') {
+      return
+    }
+    item.uploadName = String(uploadName || '').trim()
+    item.errorText = ''
+    if (item.status === 'error') {
+      item.status = 'to-upload'
+    }
+  }
+
+  deleteSelectedUploadItems() {
+    const task = this.currentUploadTask
+    if (!task || task.selectedRowIds.length === 0) {
+      return
+    }
+    const selectedSet = new Set(task.selectedRowIds)
+    task.items = task.items.filter((item) => item.status === 'uploading' || !selectedSet.has(item.itemId))
+    task.selectedRowIds = task.selectedRowIds.filter((rowId) => task.items.some((item) => item.itemId === rowId))
+    task.messageText = `${task.items.length} file item(s) ready`
+  }
+
+  async requestUploadItems(mode: 'selected' | 'all') {
+    const task = this.currentUploadTask
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    if (!task) {
+      return { isSuccess: false, messageText: 'no upload task' }
+    }
+    if (task.isUploading) {
+      return { isSuccess: false, messageText: 'upload is in progress' }
+    }
+    const selectedSet = new Set(task.selectedRowIds)
+    const itemList = task.items.filter((item) => {
+      if (item.status === 'success' || item.status === 'uploading') {
+        return false
+      }
+      if (mode === 'selected') {
+        return selectedSet.has(item.itemId)
+      }
+      return true
+    })
+    if (itemList.length === 0) {
+      return { isSuccess: false, messageText: 'no file items to upload' }
+    }
+    runInAction(() => {
+      task.isUploading = true
+      task.messageText = `uploading ${itemList.length} file item(s)`
+      task.errorText = ''
+    })
+    let successCount = 0
+    for (const uploadItem of itemList) {
+      await this.requestUploadOneItem(task, uploadItem)
+      if (uploadItem.status === 'success') {
+        successCount += 1
+      }
+    }
+    runInAction(() => {
+      task.isUploading = false
+      task.messageText = `upload finished: ${successCount}/${itemList.length} success`
+    })
+    return {
+      isSuccess: successCount === itemList.length,
+      messageText: `upload finished: ${successCount}/${itemList.length} success`,
+    }
+  }
+
+  async requestUploadOneItem(task: UploadTaskState, uploadItem: UploadFileItem) {
+    const uploadName = String(uploadItem.uploadName || '').trim()
+    if (!uploadName) {
+      runInAction(() => {
+        uploadItem.status = 'error'
+        uploadItem.errorText = 'upload file name is required'
+        uploadItem.progressPercent = 0
+        uploadItem.isBackendProcessing = false
+      })
+      return
+    }
+    runInAction(() => {
+      uploadItem.status = 'uploading'
+      uploadItem.progressPercent = 0
+      uploadItem.isBackendProcessing = false
+      uploadItem.errorText = ''
+    })
+    try {
+      const data = await this.requestUploadOneFile(task, uploadItem, uploadName)
+      runInAction(() => {
+        uploadItem.status = 'success'
+        uploadItem.progressPercent = 100
+        uploadItem.isBackendProcessing = false
+        uploadItem.errorText = ''
+        this.addExploreFileItemIfCurrent(
+          task.fileAccessPointId,
+          String(data.folderPath || task.folderPath),
+          String(data.name || uploadName),
+          Number(data.sizeBytes || uploadItem.sizeBytes),
+        )
+      })
+    } catch (error: unknown) {
+      runInAction(() => {
+        uploadItem.status = 'error'
+        uploadItem.isBackendProcessing = false
+        uploadItem.errorText = String(error)
+        task.errorText = String(error)
+      })
+    }
+  }
+
+  requestUploadOneFile(task: UploadTaskState, uploadItem: UploadFileItem, uploadName: string) {
+    const formData = new FormData()
+    formData.append('fileAccessPointId', task.fileAccessPointId)
+    formData.append('path', task.folderPath)
+    formData.append('uploadName', uploadName)
+    formData.append('file', uploadItem.file, uploadItem.fileName)
+    const authToken = String(authStore.token || '')
+    const url = withAuthQuery(resolveApiUrl('/file-access-point/explore/upload'), authToken)
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url)
+      xhr.withCredentials = true
+      const authHeaders = authStore.getAuthHeaders() as Record<string, string>
+      Object.entries(authHeaders).forEach(([key, value]) => {
+        xhr.setRequestHeader(key, value)
+      })
+      if (authToken) {
+        xhr.setRequestHeader('X-Auth-Token', authToken)
+      }
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) {
+          return
+        }
+        const nextPercent = Math.max(0, Math.min(100, Math.floor((event.loaded / event.total) * 100)))
+        runInAction(() => {
+          uploadItem.progressPercent = nextPercent
+          uploadItem.isBackendProcessing = nextPercent >= 100
+        })
+      }
+      xhr.onerror = () => {
+        reject(new Error('upload request failed'))
+      }
+      xhr.onabort = () => {
+        reject(new Error('upload request aborted'))
+      }
+      xhr.onload = () => {
+        let responseBody: { code?: number, data?: Record<string, unknown>, message?: string }
+        try {
+          responseBody = JSON.parse(String(xhr.responseText || '{}'))
+        } catch (error: unknown) {
+          reject(new Error(`backend response is not JSON: ${String(error)}`))
+          return
+        }
+        if (xhr.status === 401) {
+          authStore.clearSessionOnUnauthorized()
+          reject(new Error(responseBody.message || 'unauthorized'))
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300 || Number(responseBody.code || 0) < 0) {
+          reject(new Error(responseBody.message || `request failed: ${xhr.status}`))
+          return
+        }
+        resolve(responseBody.data || {})
+      }
+      xhr.send(formData)
+    })
   }
 
   setTextEditorContent(content: string) {
@@ -447,6 +779,29 @@ export class FileAccessPointStore {
     }
   }
 
+  async requestDownloadExploreFile(fileAccessPointId: string, targetPath: string) {
+    const response = await requestAuthenticatedBlob('/file-access-point/explore/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileAccessPointId,
+        path: targetPath,
+      }),
+    })
+    const blob = await response.blob()
+    const downloadUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = getPathName(targetPath) || 'download.bin'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+    return { isSuccess: true, messageText: `Downloaded: ${targetPath}` }
+  }
+
   async requestOpenTextEditor(fileAccessPointId: string, targetPath: string) {
     if (!this.canWrite) {
       return { isSuccess: false, messageText: 'write permission required' }
@@ -470,6 +825,9 @@ export class FileAccessPointStore {
       const content = String(data.content || '')
       const path = String(data.path || targetPath)
       runInAction(() => {
+        const backupName = String(data.backupName || getPathName(String(data.backupPath || '')))
+        const backupSizeBytes = Number(data.backupSizeBytes || data.sizeBytes || 0)
+        this.addExploreFileItemIfCurrent(fileAccessPointId, buildParentPath(path), backupName, backupSizeBytes)
         this.isTextEditorOpen = true
         this.textEditorFileAccessPointId = fileAccessPointId
         this.textEditorPath = path
@@ -550,13 +908,20 @@ export class FileAccessPointStore {
     if (!this.selectedItem) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
+    const fileAccessPointId = this.selectedItem.fileAccessPointId
     try {
       const data = await requestAuthenticatedJson('/file-access-point/explore/text/clean-bak', {
         method: 'POST',
         body: JSON.stringify({
-          fileAccessPointId: this.selectedItem.fileAccessPointId,
+          fileAccessPointId,
           path: folderPath,
         }),
+      })
+      const removedNames = Array.isArray(data.removedNames)
+        ? data.removedNames.map((name) => String(name || '')).filter((name) => name)
+        : []
+      runInAction(() => {
+        this.removeExploreFileItemsIfCurrent(fileAccessPointId, String(data.path || folderPath), removedNames)
       })
       return {
         isSuccess: true,

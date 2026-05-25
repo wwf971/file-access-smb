@@ -5,6 +5,7 @@ import './App.css'
 import ResourceTree from './ResourceTree'
 import ResourcePanel from './ResourcePanel'
 import EditorTxt from './fileAccessPoint/EditorTxt'
+import UploadFile from './fileAccessPoint/UploadFile'
 import { appStore } from './store/appStore'
 import { authStore } from './store/authStore'
 import { fileAccessPointStore } from './store/fileAccessPointStore'
@@ -73,6 +74,7 @@ const App = observer(() => {
         </div>
       ) : null}
       <EditorTxt />
+      <UploadFile />
     </div>
   )
 })
