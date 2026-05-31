@@ -37,16 +37,19 @@ def _normalize_metadata(raw_metadata: dict[str, Any]):
         "username": _to_text(raw_metadata.get("username")),
         "password": str(raw_metadata.get("password") or ""),
         "share": _to_text(raw_metadata.get("share")),
-        "path": _to_text(raw_metadata.get("path")) or "/",
+        "path": _normalize_path(raw_metadata.get("path")),
     }
 
 
 def _normalize_path(path_value: Any):
     path_text = _to_text(path_value) or "/"
     normalized = path_text.replace("\\", "/")
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
     if not normalized.startswith("/"):
         normalized = f"/{normalized}"
-    return normalized
+    normalized = normalized.rstrip("/")
+    return normalized or "/"
 
 
 def _join_path(base_path: str, name: str):
@@ -127,7 +130,7 @@ def _validate_metadata(metadata: dict[str, Any]):
 
 def _load_config_file_access_points():
     project_config = load_project_config(get_dir_base())
-    raw_items = project_config.get("file_access_points") or {}
+    raw_items = project_config.get("file_access_point_smb_external") or project_config.get("file_access_points") or {}
     item_list = []
     for key in raw_items:
         raw_item = raw_items.get(key)
@@ -212,7 +215,46 @@ def _find_file_access_point_by_id(file_access_point_id: str):
     return None
 
 
-def register_file_access_point_routes(app, sock, make_json_response, validate_auth_token):
+def _find_file_access_point_by_name(file_access_point_name: str):
+    normalized_name = str(file_access_point_name or "").strip()
+    if not normalized_name:
+        return None
+    merged_list, _database_error_text = _load_all_file_access_points()
+    for item in merged_list:
+        if str(item.get("name") or "") == normalized_name:
+            return item
+    return None
+
+
+def register_fap_smb_external_routes(app, sock, make_json_response, validate_auth_token):
+    @app.get("/file-access-point/get-by-id")
+    @app.post("/file-access-point/get-by-id")
+    def file_access_point_get_by_id():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId") or request.args.get("fileAccessPointId"))
+        if not file_access_point_id:
+            return make_json_response(-1, message="fileAccessPointId is required"), 400
+        item = _find_file_access_point_by_id(file_access_point_id)
+        if item is None:
+            return make_json_response(-1, message=f"smb/external file access point not found: {file_access_point_id}"), 404
+        return make_json_response(0, data={"item": item})
+
+    @app.get("/file-access-point/get-by-name")
+    @app.post("/file-access-point/get-by-name")
+    def file_access_point_get_by_name():
+        if not has_request_permission("R"):
+            return make_json_response(-1, message="read permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_name = _to_text(body.get("fileAccessPointName") or request.args.get("fileAccessPointName"))
+        if not file_access_point_name:
+            return make_json_response(-1, message="fileAccessPointName is required"), 400
+        item = _find_file_access_point_by_name(file_access_point_name)
+        if item is None:
+            return make_json_response(-1, message=f"smb/external file access point not found by name: {file_access_point_name}"), 404
+        return make_json_response(0, data={"item": item})
+
     @app.get("/file-access-point/list")
     def file_access_point_list():
         if not has_request_permission("R"):

@@ -9,7 +9,8 @@ Core modules:
 - `../backend/config_loader.py`: layered YAML loader
 - `../backend/db.py`: database bootstrap and CRUD
 - `../backend/smb_service.py`: SMB shared connection/session manager
-- `../backend/file_access_point.py`: REST endpoints for SMB file access points
+- `../backend/fap_smb_external.py`: REST endpoints for SMB external file access points
+- `../backend/fap_smb_internal.py`: REST endpoints for SMB internal file access points and managed file metadata
 
 Service start:
 

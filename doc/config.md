@@ -15,7 +15,8 @@ Key sections:
 
 - `auth`: login username/password and zip encryption key
 - `config_databases`: PostgreSQL targets
-- `file_access_points`: static SMB file access points loaded from local config
+- `file_access_point_smb_external`: static SMB external file access points loaded from local config
+- `file_access_point_smb_internal`: static SMB internal file access points loaded from local config
 
 `auth` example:
 
@@ -38,16 +39,31 @@ config_databases:
     password: example_password
 ```
 
-`file_access_points` example:
+`file_access_point_smb_external` example:
 
 ```yaml
-file_access_points:
+file_access_point_smb_external:
   nas:
     host: 192.168.0.7
     username: example_username
     password: example_password
     share: /Data
-    path: /
+    path: /media/data/
+```
+
+`share` names the SMB share. `path` is an optional base folder inside the share. The service normalizes `path`, so `media/data`, `/media/data/`, `\media\data\`, and `//media//data//` are treated as the same base folder.
+
+`file_access_point_smb_internal` example:
+
+```yaml
+file_access_point_smb_internal:
+  managed-files:
+    name: managed-files
+    file_access_point_smb_external_info:
+      name: nas
+    path_root: /file-access-smb-managed
+    metadata:
+      purpose: example
 ```
 
 Related docs:

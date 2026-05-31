@@ -9,7 +9,8 @@ from flask_sock import Sock
 
 from db import database_config, ensure_database_exists, get_dir_base, init_schema
 from login import is_request_authorized, register_login_routes, validate_auth_token
-from file_access_point import register_file_access_point_routes
+from fap_smb_external import register_fap_smb_external_routes
+from fap_smb_internal import register_fap_smb_internal_routes
 
 
 def make_json_response(code: int, data: Any = None, message: str = ""):
@@ -69,7 +70,8 @@ def health_database():
 
 
 register_login_routes(app, make_json_response)
-register_file_access_point_routes(app, sock, make_json_response, validate_auth_token)
+register_fap_smb_external_routes(app, sock, make_json_response, validate_auth_token)
+register_fap_smb_internal_routes(app, make_json_response)
 
 
 @app.before_request
@@ -77,6 +79,7 @@ def auth_guard():
     path = str(request.path or "")
     protected_prefixes = (
         "/file-access-point/",
+        "/smb-internal-file-access-point/",
         "/health/database",
         "/login/check",
     )

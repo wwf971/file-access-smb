@@ -18,9 +18,18 @@ config_databases:
     username: postgres
     password: postgres
 
-file_access_points:
+file_access_point_smb_external:
   nas:
     host: 192.168.0.7
     username: example_username
     password: example_password
     share: /example_share
+
+file_access_point_smb_internal:
+  managed-files:
+    name: managed-files
+    file_access_point_smb_external_info:
+      name: nas
+    path_root: /file-access-smb-managed
+    metadata:
+      purpose: example

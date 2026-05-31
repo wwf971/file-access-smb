@@ -101,6 +101,12 @@
   height: 22px;
 }
 
+.mode-btn-active {
+  border-color: #6f91c7;
+  background: #dceaff;
+  color: #17305f;
+}
+
 .text-input {
   border: 1px solid #c7d3e8;
   border-radius: 3px;

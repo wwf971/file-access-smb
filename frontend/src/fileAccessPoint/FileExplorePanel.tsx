@@ -136,7 +136,7 @@ function buildTextEditorCheck(fileName: string, sizeBytes: number) {
 const FOLDER_COLUMNS = {
   name: { data: 'name', align: 'left' },
   type: { data: 'type', align: 'left' },
-  size: { data: 'size', align: 'right' },
+  size: { data: 'size', align: 'left' },
 }
 
 const FOLDER_COLUMNS_ORDER = ['name', 'type', 'size']

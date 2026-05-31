@@ -30,14 +30,23 @@ def load_project_config(dir_base: Path):
     default_config = _safe_load_yaml_file(config_dir / "config.yaml")
     local_config = _safe_load_yaml_file(config_dir / "config.0.yaml")
     merged = _deep_merge(default_config, local_config)
-    local_file_access_points = local_config.get("file_access_points")
-    if isinstance(local_file_access_points, dict) and len(local_file_access_points) > 0:
-        merged["file_access_points"] = local_file_access_points
+    local_file_access_point_smb_external = (
+        local_config.get("file_access_point_smb_external")
+        or local_config.get("file_access_points")
+    )
+    if isinstance(local_file_access_point_smb_external, dict) and len(local_file_access_point_smb_external) > 0:
+        merged["file_access_point_smb_external"] = local_file_access_point_smb_external
+    local_file_access_point_smb_internal = local_config.get("file_access_point_smb_internal")
+    if isinstance(local_file_access_point_smb_internal, dict) and len(local_file_access_point_smb_internal) > 0:
+        merged["file_access_point_smb_internal"] = local_file_access_point_smb_internal
     local_databases = local_config.get("config_databases")
     if isinstance(local_databases, dict) and len(local_databases) > 0:
         merged["config_databases"] = local_databases
     if not isinstance(merged.get("config_databases"), dict):
         merged["config_databases"] = {}
-    if not isinstance(merged.get("file_access_points"), dict):
-        merged["file_access_points"] = {}
+    if not isinstance(merged.get("file_access_point_smb_external"), dict):
+        legacy_file_access_points = merged.get("file_access_points")
+        merged["file_access_point_smb_external"] = legacy_file_access_points if isinstance(legacy_file_access_points, dict) else {}
+    if not isinstance(merged.get("file_access_point_smb_internal"), dict):
+        merged["file_access_point_smb_internal"] = {}
     return merged

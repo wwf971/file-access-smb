@@ -7,19 +7,17 @@ from threading import Lock
 from time import time
 from typing import Any
 
-from smbclient import delete_session, open_file, register_session, remove, rename, scandir
+from smbclient import delete_session, mkdir, open_file, register_session, remove, rename, scandir
 from smbprotocol.exceptions import SMBAuthenticationError, SMBOSError
 
 BACKUP_FILE_NAME_RE = re.compile(r"^.+-bak-\d{8}_\d{8}[+-]\d{2}(?:\.[^./\\]+)?$")
 
 
 def _normalize_share_name(share_value: str):
-    text = str(share_value or "").strip()
-    if text.startswith("/"):
-        text = text[1:]
-    if text.startswith("\\"):
-        text = text[1:]
-    return text
+    text = str(share_value or "").replace("\\", "/").strip()
+    while "//" in text:
+        text = text.replace("//", "/")
+    return text.strip("/")
 
 
 def build_unc_path(host: str, share: str, inner_path: str):
@@ -40,9 +38,28 @@ def normalize_path(path_value: str):
     normalized = str(path_value or "/").replace("\\", "/").strip()
     if not normalized:
         return "/"
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
     if not normalized.startswith("/"):
         normalized = f"/{normalized}"
+    normalized = normalized.rstrip("/")
+    if not normalized:
+        return "/"
     return normalized
+
+
+def join_path(base_path: str, target_path: str):
+    normalized_base = normalize_path(base_path)
+    normalized_target = normalize_path(target_path)
+    if normalized_target == "/":
+        return normalized_base
+    if normalized_base == "/":
+        return normalized_target
+    return f"{normalized_base}{normalized_target}"
+
+
+def resolve_metadata_path(metadata: dict[str, Any], target_path: str):
+    return join_path(str(metadata.get("path") or "/"), target_path)
 
 
 def split_parent_and_name(path_value: str):
@@ -135,7 +152,7 @@ class SmbConnectionManager:
                     password=password,
                     connection_timeout=8,
                 )
-                root_path = build_unc_path(host, share, "/")
+                root_path = build_unc_path(host, share, resolve_metadata_path(metadata, "/"))
                 list(scandir(root_path))
                 state.is_connected = True
                 state.last_error_text = ""
@@ -153,7 +170,7 @@ class SmbConnectionManager:
         with lock:
             host = str(metadata.get("host") or "").strip()
             share = str(metadata.get("share") or "").strip()
-            unc_path = build_unc_path(host, share, target_path)
+            unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, target_path))
             item_list = []
             for entry in scandir(unc_path):
                 item_list.append(
@@ -172,7 +189,7 @@ class SmbConnectionManager:
         with lock:
             host = str(metadata.get("host") or "").strip()
             share = str(metadata.get("share") or "").strip()
-            unc_path = build_unc_path(host, share, target_path)
+            unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, target_path))
             with open_file(unc_path, mode="rb") as file_obj:
                 return file_obj.read()
 
@@ -182,7 +199,7 @@ class SmbConnectionManager:
         with lock:
             host = str(metadata.get("host") or "").strip()
             share = str(metadata.get("share") or "").strip()
-            unc_path = build_unc_path(host, share, target_path)
+            unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, target_path))
             with open_file(unc_path, mode="wb") as file_obj:
                 file_obj.write(file_bytes)
             return {
@@ -209,7 +226,7 @@ class SmbConnectionManager:
             host = str(metadata.get("host") or "").strip()
             share = str(metadata.get("share") or "").strip()
             normalized_folder_path = normalize_path(folder_path)
-            folder_unc_path = build_unc_path(host, share, normalized_folder_path)
+            folder_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_folder_path))
             existing_name_set = {str(entry.name) for entry in scandir(folder_unc_path)}
             if normalized_name in existing_name_set:
                 raise RuntimeError(f"file already exists: {normalized_name}")
@@ -218,13 +235,68 @@ class SmbConnectionManager:
                 if normalized_folder_path != "/"
                 else f"/{normalized_name}"
             )
-            target_unc_path = build_unc_path(host, share, target_path)
+            target_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, target_path))
             with open_file(target_unc_path, mode="wb") as file_obj:
                 file_obj.write(file_bytes)
             return {
                 "path": target_path,
                 "name": normalized_name,
                 "sizeBytes": len(file_bytes),
+            }
+
+    def ensure_dir(self, file_access_point_id: str, metadata: dict[str, Any], target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_path = normalize_path(target_path)
+            if normalized_path == "/":
+                build_unc_path(host, share, resolve_metadata_path(metadata, "/"))
+                return {"path": "/"}
+            current_path = ""
+            for path_part in [part for part in normalized_path.split("/") if part]:
+                parent_path = normalize_path(current_path or "/")
+                current_path = f"{parent_path.rstrip('/')}/{path_part}" if parent_path != "/" else f"/{path_part}"
+                parent_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, parent_path))
+                entry_map = {str(entry.name): entry for entry in scandir(parent_unc_path)}
+                existing_entry = entry_map.get(path_part)
+                if existing_entry is not None:
+                    if not existing_entry.is_dir():
+                        raise RuntimeError(f"path exists but is not a folder: {current_path}")
+                    continue
+                mkdir(build_unc_path(host, share, resolve_metadata_path(metadata, current_path)))
+            return {"path": normalized_path}
+
+    def remove_file(self, file_access_point_id: str, metadata: dict[str, Any], target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_path = normalize_path(target_path)
+            if normalized_path == "/":
+                raise RuntimeError("cannot remove root path")
+            remove(build_unc_path(host, share, resolve_metadata_path(metadata, normalized_path)))
+            return {"path": normalized_path}
+
+    def move_file(self, file_access_point_id: str, metadata: dict[str, Any], source_path: str, target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_source_path = normalize_path(source_path)
+            normalized_target_path = normalize_path(target_path)
+            if normalized_source_path == "/" or normalized_target_path == "/":
+                raise RuntimeError("sourcePath and targetPath should point to files")
+            rename(
+                build_unc_path(host, share, resolve_metadata_path(metadata, normalized_source_path)),
+                build_unc_path(host, share, resolve_metadata_path(metadata, normalized_target_path)),
+            )
+            return {
+                "sourcePath": normalized_source_path,
+                "targetPath": normalized_target_path,
             }
 
     def create_backup_file(
@@ -245,12 +317,12 @@ class SmbConnectionManager:
                 raise RuntimeError("path should point to a file")
             backup_name = build_backup_file_name(file_name)
             backup_path = f"{parent_path.rstrip('/')}/{backup_name}" if parent_path != "/" else f"/{backup_name}"
-            parent_unc_path = build_unc_path(host, share, parent_path)
+            parent_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, parent_path))
             existing_name_set = {str(entry.name) for entry in scandir(parent_unc_path)}
             if backup_name in existing_name_set:
                 raise RuntimeError(f"backup file already exists: {backup_name}")
-            source_unc_path = build_unc_path(host, share, normalized_path)
-            backup_unc_path = build_unc_path(host, share, backup_path)
+            source_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_path))
+            backup_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, backup_path))
             with open_file(source_unc_path, mode="rb") as source_obj:
                 file_bytes = source_obj.read()
             if max_size_bytes is not None and len(file_bytes) > max_size_bytes:
@@ -271,13 +343,17 @@ class SmbConnectionManager:
             host = str(metadata.get("host") or "").strip()
             share = str(metadata.get("share") or "").strip()
             normalized_path = normalize_path(target_path)
-            folder_unc_path = build_unc_path(host, share, normalized_path)
+            folder_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_path))
             removed_name_list = []
             for entry in list(scandir(folder_unc_path)):
                 name = str(entry.name)
                 if entry.is_dir() or not is_backup_file_name(name):
                     continue
-                remove(build_unc_path(host, share, f"{normalized_path.rstrip('/')}/{name}" if normalized_path != "/" else f"/{name}"))
+                remove(build_unc_path(
+                    host,
+                    share,
+                    resolve_metadata_path(metadata, f"{normalized_path.rstrip('/')}/{name}" if normalized_path != "/" else f"/{name}"),
+                ))
                 removed_name_list.append(name)
             return {
                 "path": normalized_path,
@@ -300,9 +376,9 @@ class SmbConnectionManager:
             parent_path, old_name = split_parent_and_name(normalized_path)
             if not old_name:
                 raise RuntimeError("cannot rename root path")
-            src_unc_path = build_unc_path(host, share, normalized_path)
+            src_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_path))
             dst_path = f"{parent_path.rstrip('/')}/{normalized_name}" if parent_path != "/" else f"/{normalized_name}"
-            dst_unc_path = build_unc_path(host, share, dst_path)
+            dst_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, dst_path))
             rename(src_unc_path, dst_unc_path)
             return {
                 "path": normalized_path,
