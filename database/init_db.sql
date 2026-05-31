@@ -24,6 +24,9 @@ create table if not exists smb_internal_file_access_point (
 alter table smb_internal_file_access_point
   add column if not exists fileAccessPointSmbExternalInfo jsonb not null default '{}'::jsonb;
 
+alter table smb_internal_file_access_point
+  drop column if exists fileAccessPointExternalId;
+
 create index if not exists idx_smb_internal_file_access_point_created_at
   on smb_internal_file_access_point(createdAt);
 

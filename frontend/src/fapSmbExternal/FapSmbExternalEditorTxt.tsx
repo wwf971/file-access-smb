@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { observer } from 'mobx-react-lite'
 import { SpinningCircle } from '@wwf971/react-comp-misc'
-import { fileAccessPointStore } from '../store/fileAccessPointStore'
+import { fapSmbExternalStore } from '../store/fapSmbExternalStore'
 
 const MARKDOWN_COMPONENTS = {
   h1: ({ children }: any) => <div className="txt-editor-md-title txt-editor-md-title-level-1">{children}</div>,
@@ -27,9 +27,9 @@ const MARKDOWN_COMPONENTS = {
   em: ({ children }: any) => <span className="txt-editor-md-em">{children}</span>,
 }
 
-const EditorTxt = observer(() => {
-  const isOpen = fileAccessPointStore.isTextEditorOpen
-  const isBusy = fileAccessPointStore.isTextEditorLoading || fileAccessPointStore.isTextEditorSaving
+const FapSmbExternalEditorTxt = observer(() => {
+  const isOpen = fapSmbExternalStore.isTextEditorOpen
+  const isBusy = fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving
 
   useEffect(() => {
     if (!isOpen) {
@@ -38,7 +38,7 @@ const EditorTxt = observer(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
-        fileAccessPointStore.requestSaveTextEditor()
+        fapSmbExternalStore.requestSaveTextEditor()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -56,23 +56,23 @@ const EditorTxt = observer(() => {
       <div className="txt-editor-popup">
         <div className="txt-editor-top-row">
           <div className="txt-editor-title-wrap">
-            <div className="txt-editor-title">{fileAccessPointStore.textEditorPath}</div>
+            <div className="txt-editor-title">{fapSmbExternalStore.textEditorPath}</div>
             <div className="txt-editor-subtitle">
-              {fileAccessPointStore.isTextEditorDirty ? 'modified' : 'saved'}
-              {fileAccessPointStore.textEditorBackupPath ? ` | backup: ${fileAccessPointStore.textEditorBackupPath}` : ''}
+              {fapSmbExternalStore.isTextEditorDirty ? 'modified' : 'saved'}
+              {fapSmbExternalStore.textEditorBackupPath ? ` | backup: ${fapSmbExternalStore.textEditorBackupPath}` : ''}
             </div>
           </div>
           <div className="txt-editor-action-row">
-            {fileAccessPointStore.isTextEditorMarkdown ? (
+            {fapSmbExternalStore.isTextEditorMarkdown ? (
               <button
                 type="button"
                 className="main-btn"
                 disabled={isBusy}
                 onClick={() => {
-                  fileAccessPointStore.toggleMarkdownPreview()
+                  fapSmbExternalStore.toggleMarkdownPreview()
                 }}
               >
-                {fileAccessPointStore.isMarkdownPreviewVisible ? 'hide preview' : 'show preview'}
+                {fapSmbExternalStore.isMarkdownPreviewVisible ? 'hide preview' : 'show preview'}
               </button>
             ) : null}
             <button
@@ -80,7 +80,7 @@ const EditorTxt = observer(() => {
               className="main-btn"
               disabled={isBusy}
               onClick={() => {
-                fileAccessPointStore.requestSaveTextEditor()
+                fapSmbExternalStore.requestSaveTextEditor()
               }}
             >
               save
@@ -90,36 +90,36 @@ const EditorTxt = observer(() => {
               className="main-btn"
               disabled={isBusy}
               onClick={() => {
-                fileAccessPointStore.closeTextEditor()
+                fapSmbExternalStore.closeTextEditor()
               }}
             >
               close
             </button>
           </div>
         </div>
-        {fileAccessPointStore.textEditorStatusText || fileAccessPointStore.textEditorErrorText ? (
-          <div className={`txt-editor-message ${fileAccessPointStore.textEditorErrorText ? 'status-error' : 'status-info'}`}>
+        {fapSmbExternalStore.textEditorStatusText || fapSmbExternalStore.textEditorErrorText ? (
+          <div className={`txt-editor-message ${fapSmbExternalStore.textEditorErrorText ? 'status-error' : 'status-info'}`}>
             {isBusy ? <SpinningCircle width={12} height={12} /> : null}
             <div>
-              {fileAccessPointStore.textEditorErrorText || fileAccessPointStore.textEditorStatusText}
-              {fileAccessPointStore.isTextEditorDecodeLossy ? ' | some bytes could not be decoded as utf-8' : ''}
+              {fapSmbExternalStore.textEditorErrorText || fapSmbExternalStore.textEditorStatusText}
+              {fapSmbExternalStore.isTextEditorDecodeLossy ? ' | some bytes could not be decoded as utf-8' : ''}
             </div>
           </div>
         ) : null}
-        <div className={`txt-editor-body ${fileAccessPointStore.isMarkdownPreviewVisible ? 'has-preview' : ''}`}>
+        <div className={`txt-editor-body ${fapSmbExternalStore.isMarkdownPreviewVisible ? 'has-preview' : ''}`}>
           <textarea
             className="txt-editor-input"
-            value={fileAccessPointStore.textEditorContent}
+            value={fapSmbExternalStore.textEditorContent}
             spellCheck={false}
             disabled={isBusy}
             onChange={(event) => {
-              fileAccessPointStore.setTextEditorContent(event.target.value)
+              fapSmbExternalStore.setTextEditorContent(event.target.value)
             }}
           />
-          {fileAccessPointStore.isMarkdownPreviewVisible ? (
+          {fapSmbExternalStore.isMarkdownPreviewVisible ? (
             <div className="txt-editor-preview">
               <ReactMarkdown components={MARKDOWN_COMPONENTS}>
-                {fileAccessPointStore.textEditorContent}
+                {fapSmbExternalStore.textEditorContent}
               </ReactMarkdown>
             </div>
           ) : null}
@@ -129,4 +129,4 @@ const EditorTxt = observer(() => {
   )
 })
 
-export default EditorTxt
+export default FapSmbExternalEditorTxt

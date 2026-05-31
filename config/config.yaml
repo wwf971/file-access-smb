@@ -26,10 +26,10 @@ file_access_point_smb_external:
     share: /example_share
 
 file_access_point_smb_internal:
-  managed-files:
-    name: managed-files
+  file_access_point_smb_internal_example:
+    name: smb/internal-file-access-point-example
     file_access_point_smb_external_info:
       name: nas
-    path_root: /file-access-smb-managed
+    path_root: /file/
     metadata:
       purpose: example

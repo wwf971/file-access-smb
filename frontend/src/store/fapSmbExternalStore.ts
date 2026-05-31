@@ -3,7 +3,7 @@ import { resolveApiUrl, withAuthQuery } from '../../publicPath'
 import { requestAuthenticatedJson, requestAuthenticatedBlob } from '../../apiRequest'
 import { authStore } from './authStore'
 
-export type FileAccessPointItem = {
+export type FapSmbExternalItem = {
   fileAccessPointId: string
   name: string
   sourceType: 'config' | 'database'
@@ -104,14 +104,14 @@ function sortExploreItems(items: ExploreItem[]) {
   })
 }
 
-export class FileAccessPointStore {
+export class FapSmbExternalStore {
   isListLoading = false
   isSaving = false
   isDeleting = false
   isChecking = false
   isZipRunning = false
   errorText = ''
-  items: FileAccessPointItem[] = []
+  items: FapSmbExternalItem[] = []
   selectedId = ''
   selectedPanel: 'config' | 'explore' = 'config'
   exploreStateByFileAccessPointId: Record<string, ExploreState> = {}
@@ -505,7 +505,7 @@ export class FileAccessPointStore {
     })
     try {
       const data = await requestAuthenticatedJson('/file-access-point/list')
-      const items = Array.isArray(data.items) ? (data.items as FileAccessPointItem[]) : []
+      const items = Array.isArray(data.items) ? (data.items as FapSmbExternalItem[]) : []
       runInAction(() => {
         this.items = items
         const nextIdSet = new Set(items.map((item) => item.fileAccessPointId))
@@ -1147,4 +1147,4 @@ export class FileAccessPointStore {
   }
 }
 
-export const fileAccessPointStore = new FileAccessPointStore()
+export const fapSmbExternalStore = new FapSmbExternalStore()

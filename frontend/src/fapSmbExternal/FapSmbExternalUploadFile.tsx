@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { EditIcon, FolderView, InfoIconWithTooltip, SpinningCircle } from '@wwf971/react-comp-misc'
-import { fileAccessPointStore } from '../store/fileAccessPointStore'
-import type { UploadFileItem } from '../store/fileAccessPointStore'
+import { fapSmbExternalStore } from '../store/fapSmbExternalStore'
+import type { UploadFileItem } from '../store/fapSmbExternalStore'
 
 const UPLOAD_COLUMNS = {
   fileName: { data: 'fileName', align: 'left' },
@@ -86,7 +86,7 @@ const UploadNameCell = observer(({ item }: { item: UploadFileItem }) => {
       setIsEditing(false)
       return
     }
-    fileAccessPointStore.setUploadItemName(item.itemId, String(editRef.current.textContent || '').trim())
+    fapSmbExternalStore.setUploadItemName(item.itemId, String(editRef.current.textContent || '').trim())
     setIsEditing(false)
   }
 
@@ -187,8 +187,8 @@ const UploadStatusCell = observer(({ item }: { item: UploadFileItem }) => {
   return <div className="upload-file-status-cell">to be uploaded</div>
 })
 
-const UploadFile = observer(() => {
-  const task = fileAccessPointStore.currentUploadTask
+const FapSmbExternalUploadFile = observer(() => {
+  const task = fapSmbExternalStore.currentUploadTask
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   if (!task) {
@@ -218,7 +218,7 @@ const UploadFile = observer(() => {
   })
 
   const addFiles = (files: FileList | File[]) => {
-    fileAccessPointStore.addUploadFiles(files)
+    fapSmbExternalStore.addUploadFiles(files)
   }
 
   return (
@@ -234,7 +234,7 @@ const UploadFile = observer(() => {
             className="upload-file-close-btn"
             disabled={task.isUploading}
             onClick={() => {
-              fileAccessPointStore.closeUploadPopup()
+              fapSmbExternalStore.closeUploadPopup()
             }}
           >
             x
@@ -291,7 +291,7 @@ const UploadFile = observer(() => {
             className="main-btn danger-btn"
             disabled={isDeleteDisabled}
             onClick={() => {
-              fileAccessPointStore.deleteSelectedUploadItems()
+              fapSmbExternalStore.deleteSelectedUploadItems()
             }}
           >
             delete selected
@@ -301,7 +301,7 @@ const UploadFile = observer(() => {
             className="main-btn"
             disabled={isUploadSelectedDisabled}
             onClick={() => {
-              fileAccessPointStore.requestUploadItems('selected')
+              fapSmbExternalStore.requestUploadItems('selected')
             }}
           >
             upload selected
@@ -311,7 +311,7 @@ const UploadFile = observer(() => {
             className="main-btn"
             disabled={isUploadAllDisabled}
             onClick={() => {
-              fileAccessPointStore.requestUploadItems('all')
+              fapSmbExternalStore.requestUploadItems('all')
             }}
           >
             upload all
@@ -329,7 +329,7 @@ const UploadFile = observer(() => {
             selectionMode="multiple"
             selectedRowIds={task.selectedRowIds}
             onSelectedRowIdsChange={(rowIds: string[]) => {
-              fileAccessPointStore.setUploadSelectedRowIds(rowIds)
+              fapSmbExternalStore.setUploadSelectedRowIds(rowIds)
             }}
             loading={false}
             showStatusItemCount={true}
@@ -347,7 +347,7 @@ const UploadFile = observer(() => {
             className="main-btn"
             disabled={task.isUploading}
             onClick={() => {
-              fileAccessPointStore.closeUploadPopup()
+              fapSmbExternalStore.closeUploadPopup()
             }}
           >
             cancel
@@ -358,4 +358,4 @@ const UploadFile = observer(() => {
   )
 })
 
-export default UploadFile
+export default FapSmbExternalUploadFile

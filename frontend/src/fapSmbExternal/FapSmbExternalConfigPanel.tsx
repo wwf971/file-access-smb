@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { KeyValues, MetadataKeyValues, SpinningCircle } from '@wwf971/react-comp-misc'
-import { fileAccessPointStore } from '../store/fileAccessPointStore'
+import { fapSmbExternalStore } from '../store/fapSmbExternalStore'
 
 type MetadataRow = {
   id: string
@@ -9,8 +9,8 @@ type MetadataRow = {
   value: string
 }
 
-const FileAccessPointConfigPanel = observer(() => {
-  const item = fileAccessPointStore.selectedItem
+const FapSmbExternalConfigPanel = observer(() => {
+  const item = fapSmbExternalStore.selectedItem
   const [name, setName] = useState('')
   const [metadataRows, setMetadataRows] = useState<MetadataRow[]>([])
   const [selectedMetadataTag, setSelectedMetadataTag] = useState<string | null>(null)
@@ -37,8 +37,8 @@ const FileAccessPointConfigPanel = observer(() => {
     })
   }, [item?.fileAccessPointId])
 
-  const canWrite = fileAccessPointStore.canWrite
-  const isPanelLocked = fileAccessPointStore.isChecking || fileAccessPointStore.isSaving || fileAccessPointStore.isDeleting
+  const canWrite = fapSmbExternalStore.canWrite
+  const isPanelLocked = fapSmbExternalStore.isChecking || fapSmbExternalStore.isSaving || fapSmbExternalStore.isDeleting
 
   const selectedRowIndex = selectedMetadataTag
     ? metadataRows.findIndex((row) => row.id === selectedMetadataTag)
@@ -64,7 +64,7 @@ const FileAccessPointConfigPanel = observer(() => {
       status: 'loading',
       messageText: isForceReconnect ? 'Reconnecting SMB connection' : 'Checking SMB connection',
     })
-    const result = await fileAccessPointStore.requestCheckConnection(isForceReconnect, 8000)
+    const result = await fapSmbExternalStore.requestCheckConnection(isForceReconnect, 8000)
     setMessageState({
       status: result?.isSuccess ? 'success' : 'error',
       messageText: result?.messageText || '',
@@ -72,7 +72,7 @@ const FileAccessPointConfigPanel = observer(() => {
   }
 
   if (!item) {
-    return <div className="panel-title">No file access point selected</div>
+    return <div className="panel-title">No FAP SMB external selected</div>
   }
 
   return (
@@ -80,27 +80,25 @@ const FileAccessPointConfigPanel = observer(() => {
       <div className="panel-title">
         SMB Config {item.name} [{item.sourceType}]
       </div>
-      {messageState.messageText ? (
-        <div className={`frontend-message-bar status-${messageState.status}`}>
-          {messageState.status === 'loading' ? <SpinningCircle width={13} height={13} /> : null}
-          <div className="frontend-message-content">
-            <span>{messageState.messageText}</span>
-            <button
-              type="button"
-              className="frontend-message-dismiss-btn"
-              onClick={() => {
-                setMessageState({
-                  status: 'idle',
-                  messageText: '',
-                })
-              }}
-              disabled={messageState.status === 'loading'}
-            >
-              Dismiss
-            </button>
-          </div>
+      <div className={`frontend-message-bar status-${messageState.messageText ? messageState.status : 'empty'}`}>
+        {messageState.status === 'loading' && messageState.messageText ? <SpinningCircle width={13} height={13} /> : null}
+        <div className="frontend-message-content">
+          <span className={messageState.messageText ? '' : 'frontend-message-empty'}>{messageState.messageText || '(NO MESSAGE)'}</span>
+          <button
+            type="button"
+            className="frontend-message-dismiss-btn"
+            onClick={() => {
+              setMessageState({
+                status: 'idle',
+                messageText: '',
+              })
+            }}
+            disabled={messageState.status === 'loading' || !messageState.messageText}
+          >
+            Dismiss
+          </button>
         </div>
-      ) : null}
+      </div>
       <div className="panel-row">
         <button
           type="button"
@@ -126,7 +124,7 @@ const FileAccessPointConfigPanel = observer(() => {
           type="button"
           className="main-btn"
           onClick={() => {
-            fileAccessPointStore.requestLoadList()
+            fapSmbExternalStore.requestLoadList()
           }}
           disabled={isPanelLocked}
         >
@@ -276,7 +274,7 @@ const FileAccessPointConfigPanel = observer(() => {
           className="main-btn"
           disabled={!item.isDeletable || isPanelLocked || !canWrite}
           onClick={async () => {
-            const result = await fileAccessPointStore.requestUpdateCurrent(name, buildMetadataObject())
+            const result = await fapSmbExternalStore.requestUpdateCurrent(name, buildMetadataObject())
             setMessageState({
               status: result?.isSuccess ? 'success' : 'error',
               messageText: result?.messageText || '',
@@ -290,7 +288,7 @@ const FileAccessPointConfigPanel = observer(() => {
           className="main-btn danger-btn"
           disabled={!item.isDeletable || isPanelLocked || !canWrite}
           onClick={async () => {
-            const result = await fileAccessPointStore.requestDeleteCurrent()
+            const result = await fapSmbExternalStore.requestDeleteCurrent()
             setMessageState({
               status: result?.isSuccess ? 'success' : 'error',
               messageText: result?.messageText || '',
@@ -304,4 +302,4 @@ const FileAccessPointConfigPanel = observer(() => {
   )
 })
 
-export default FileAccessPointConfigPanel
+export default FapSmbExternalConfigPanel

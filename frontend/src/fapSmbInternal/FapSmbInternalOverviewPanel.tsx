@@ -1,32 +1,32 @@
 import { observer } from 'mobx-react-lite'
 import { KeyValues } from '@wwf971/react-comp-misc'
-import { fileAccessPointStore } from '../store/fileAccessPointStore'
+import { fapSmbInternalStore } from '../store/fapSmbInternalStore'
 
-const FileAccessPointOverviewPanel = observer(() => {
-  const totalCount = fileAccessPointStore.items.length
-  const configCount = fileAccessPointStore.items.filter((item) => item.sourceType === 'config').length
-  const dbCount = fileAccessPointStore.items.filter((item) => item.sourceType === 'database').length
+const FapSmbInternalOverviewPanel = observer(() => {
+  const totalCount = fapSmbInternalStore.items.length
+  const configCount = fapSmbInternalStore.items.filter((item) => item.sourceType === 'config').length
+  const dbCount = fapSmbInternalStore.items.filter((item) => item.sourceType === 'database').length
 
   return (
     <div className="panel-root">
-      <div className="panel-title">FileAccessPoint(SMB) OverView</div>
+      <div className="panel-title">FAP SMB Internal Overview</div>
       <div className="panel-row">
         <button
           type="button"
           className="main-btn"
-          disabled={fileAccessPointStore.isSaving || !fileAccessPointStore.canWrite}
+          disabled={fapSmbInternalStore.isSaving || !fapSmbInternalStore.canWrite}
           onClick={() => {
-            fileAccessPointStore.requestCreateOne()
+            fapSmbInternalStore.requestCreateOne()
           }}
         >
-          create file access point
+          create FAP SMB internal
         </button>
         <button
           type="button"
           className="main-btn"
-          disabled={fileAccessPointStore.isListLoading}
+          disabled={fapSmbInternalStore.isListLoading}
           onClick={() => {
-            fileAccessPointStore.requestLoadList()
+            fapSmbInternalStore.requestLoadList()
           }}
         >
           reload list
@@ -46,4 +46,4 @@ const FileAccessPointOverviewPanel = observer(() => {
   )
 })
 
-export default FileAccessPointOverviewPanel
+export default FapSmbInternalOverviewPanel

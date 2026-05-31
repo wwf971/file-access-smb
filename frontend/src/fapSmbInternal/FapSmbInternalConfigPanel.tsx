@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { KeyValues, MetadataKeyValues, SpinningCircle } from '@wwf971/react-comp-misc'
-import { fileAccessPointSmbInternalStore } from '../store/fileAccessPointSmbInternalStore'
+import { fapSmbInternalStore, getFapSmbInternalSourceLabel } from '../store/fapSmbInternalStore'
 
 type MetadataRow = {
   id: string
@@ -9,8 +9,8 @@ type MetadataRow = {
   value: string
 }
 
-const FileAccessPointSmbInternalConfigPanel = observer(() => {
-  const item = fileAccessPointSmbInternalStore.selectedItem
+const FapSmbInternalConfigPanel = observer(() => {
+  const item = fapSmbInternalStore.selectedItem
   const [name, setName] = useState('')
   const [pathRoot, setPathRoot] = useState('/')
   const [fileAccessPointSmbExternalMode, setFileAccessPointSmbExternalMode] = useState<'id' | 'name'>('id')
@@ -42,11 +42,11 @@ const FileAccessPointSmbInternalConfigPanel = observer(() => {
   }, [item?.fileAccessPointId])
 
   if (!item) {
-    return <div className="panel-title">No smb/internal file access point selected</div>
+    return <div className="panel-title">No FAP SMB internal selected</div>
   }
 
-  const isPanelLocked = fileAccessPointSmbInternalStore.isSaving || fileAccessPointSmbInternalStore.isDeleting
-  const canWrite = fileAccessPointSmbInternalStore.canWrite
+  const isPanelLocked = fapSmbInternalStore.isSaving || fapSmbInternalStore.isDeleting
+  const canWrite = fapSmbInternalStore.canWrite
   const isEditable = item.isDeletable && canWrite
   const selectedRowIndex = selectedMetadataTag ? metadataRows.findIndex((row) => row.id === selectedMetadataTag) : -1
 
@@ -69,24 +69,22 @@ const FileAccessPointSmbInternalConfigPanel = observer(() => {
   return (
     <div className={`panel-root ${isPanelLocked ? 'panel-locked' : ''}`}>
       <div className="panel-title">
-        SMB Internal Config {item.name} [{item.sourceType}]
+        SMB Internal Config {item.name} [{getFapSmbInternalSourceLabel(item)}]
       </div>
-      {messageState.messageText ? (
-        <div className={`frontend-message-bar status-${messageState.status}`}>
-          {messageState.status === 'loading' ? <SpinningCircle width={13} height={13} /> : null}
-          <div className="frontend-message-content">
-            <span>{messageState.messageText}</span>
-            <button
-              type="button"
-              className="frontend-message-dismiss-btn"
-              onClick={() => setMessageState({ status: 'idle', messageText: '' })}
-              disabled={messageState.status === 'loading'}
-            >
-              Dismiss
-            </button>
-          </div>
+      <div className={`frontend-message-bar status-${messageState.messageText ? messageState.status : 'empty'}`}>
+        {messageState.status === 'loading' && messageState.messageText ? <SpinningCircle width={13} height={13} /> : null}
+        <div className="frontend-message-content">
+          <span className={messageState.messageText ? '' : 'frontend-message-empty'}>{messageState.messageText || '(NO MESSAGE)'}</span>
+          <button
+            type="button"
+            className="frontend-message-dismiss-btn"
+            onClick={() => setMessageState({ status: 'idle', messageText: '' })}
+            disabled={messageState.status === 'loading' || !messageState.messageText}
+          >
+            Dismiss
+          </button>
         </div>
-      ) : null}
+      </div>
       <div className="kv-wrap">
         <KeyValues
           data={[
@@ -213,7 +211,7 @@ const FileAccessPointSmbInternalConfigPanel = observer(() => {
           className="main-btn"
           disabled={!isEditable || isPanelLocked}
           onClick={async () => {
-            const result = await fileAccessPointSmbInternalStore.requestUpdateCurrent(
+            const result = await fapSmbInternalStore.requestUpdateCurrent(
               name,
               pathRoot,
               buildFileAccessPointSmbExternalInfo(),
@@ -232,7 +230,7 @@ const FileAccessPointSmbInternalConfigPanel = observer(() => {
           className="main-btn danger-btn"
           disabled={!isEditable || isPanelLocked}
           onClick={async () => {
-            const result = await fileAccessPointSmbInternalStore.requestDeleteCurrent()
+            const result = await fapSmbInternalStore.requestDeleteCurrent()
             setMessageState({
               status: result?.isSuccess ? 'success' : 'error',
               messageText: result?.messageText || '',
@@ -246,4 +244,4 @@ const FileAccessPointSmbInternalConfigPanel = observer(() => {
   )
 })
 
-export default FileAccessPointSmbInternalConfigPanel
+export default FapSmbInternalConfigPanel

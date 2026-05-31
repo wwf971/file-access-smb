@@ -1,15 +1,15 @@
 import React from 'react'
 import { observer } from 'mobx-react-lite'
 import { appStore, PAGE_KEY } from './store/appStore'
-import { fileAccessPointStore } from './store/fileAccessPointStore'
-import { fileAccessPointSmbInternalStore } from './store/fileAccessPointSmbInternalStore'
+import { fapSmbExternalStore } from './store/fapSmbExternalStore'
+import { fapSmbInternalStore } from './store/fapSmbInternalStore'
 import ServicePanel from './service/ServicePanel'
-import FileAccessPointOverviewPanel from './fileAccessPoint/FileAccessPointOverviewPanel'
-import FileAccessPointConfigPanel from './fileAccessPoint/FileAccessPointConfigPanel'
-import FileExplorePanel from './fileAccessPoint/FileExplorePanel'
-import FileAccessPointSmbInternalOverviewPanel from './fileAccessPointSmbInternal/FileAccessPointSmbInternalOverviewPanel'
-import FileAccessPointSmbInternalConfigPanel from './fileAccessPointSmbInternal/FileAccessPointSmbInternalConfigPanel'
-import FileAccessPointSmbInternalExplorePanel from './fileAccessPointSmbInternal/FileAccessPointSmbInternalExplorePanel'
+import FapSmbExternalOverviewPanel from './fapSmbExternal/FapSmbExternalOverviewPanel'
+import FapSmbExternalConfigPanel from './fapSmbExternal/FapSmbExternalConfigPanel'
+import FapSmbExternalExplorePanel from './fapSmbExternal/FapSmbExternalExplorePanel'
+import FapSmbInternalOverviewPanel from './fapSmbInternal/FapSmbInternalOverviewPanel'
+import FapSmbInternalConfigPanel from './fapSmbInternal/FapSmbInternalConfigPanel'
+import FapSmbInternalExplorePanel from './fapSmbInternal/FapSmbInternalExplorePanel'
 
 const ResourcePanel = observer(() => {
   if (appStore.currentPageKey === PAGE_KEY.serviceMetadata) {
@@ -21,31 +21,31 @@ const ResourcePanel = observer(() => {
   if (appStore.currentPageKey === PAGE_KEY.serviceDatabase) {
     return <ServicePanel mode="database" />
   }
-  if (appStore.currentPageKey === PAGE_KEY.fileAccessPointOverview) {
-    return <FileAccessPointOverviewPanel />
+  if (appStore.currentPageKey === PAGE_KEY.fapSmbExternalOverview) {
+    return <FapSmbExternalOverviewPanel />
   }
-  if (appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalOverview) {
-    return <FileAccessPointSmbInternalOverviewPanel />
+  if (appStore.currentPageKey === PAGE_KEY.fapSmbInternalOverview) {
+    return <FapSmbInternalOverviewPanel />
   }
   if (
-    appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalConfig
-    || appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalExplore
+    appStore.currentPageKey === PAGE_KEY.fapSmbInternalConfig
+    || appStore.currentPageKey === PAGE_KEY.fapSmbInternalExplore
   ) {
-    if (!fileAccessPointSmbInternalStore.selectedItem) {
-      return <div className="panel-title">No smb/internal file access point selected</div>
+    if (!fapSmbInternalStore.selectedItem) {
+      return <div className="panel-title">No FAP SMB internal selected</div>
     }
-    if (appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalExplore) {
-      return <FileAccessPointSmbInternalExplorePanel />
+    if (appStore.currentPageKey === PAGE_KEY.fapSmbInternalExplore) {
+      return <FapSmbInternalExplorePanel />
     }
-    return <FileAccessPointSmbInternalConfigPanel />
+    return <FapSmbInternalConfigPanel />
   }
-  if (!fileAccessPointStore.selectedItem) {
-    return <div className="panel-title">No file access point selected</div>
+  if (!fapSmbExternalStore.selectedItem) {
+    return <div className="panel-title">No FAP SMB external selected</div>
   }
-  if (appStore.currentPageKey === PAGE_KEY.fileAccessPointExplore) {
-    return <FileExplorePanel />
+  if (appStore.currentPageKey === PAGE_KEY.fapSmbExternalExplore) {
+    return <FapSmbExternalExplorePanel />
   }
-  return <FileAccessPointConfigPanel />
+  return <FapSmbExternalConfigPanel />
 })
 
 export default ResourcePanel

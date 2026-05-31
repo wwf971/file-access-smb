@@ -1,8 +1,8 @@
 import { makeAutoObservable, runInAction } from 'mobx'
 import { requestAuthenticatedBlob, requestAuthenticatedJson } from '../../apiRequest'
-import { fileAccessPointStore } from './fileAccessPointStore'
+import { fapSmbExternalStore } from './fapSmbExternalStore'
 
-export type FileAccessPointSmbInternalItem = {
+export type FapSmbInternalItem = {
   fileAccessPointId: string
   name: string
   fileAccessPointType: 'smb/internal'
@@ -14,12 +14,13 @@ export type FileAccessPointSmbInternalItem = {
   metadata: Record<string, unknown>
   fileTableName: string
   sourceType: 'config' | 'database'
+  isExample?: boolean
   isDeletable: boolean
   createdAt: string
   updatedAt: string
 }
 
-export type FileAccessPointSmbInternalFileItem = {
+export type FapSmbInternalFileItem = {
   fileId: string
   fileName: string
   filePath: string
@@ -32,27 +33,27 @@ export type FileAccessPointSmbInternalFileItem = {
   deletedAt: string
 }
 
-export class FileAccessPointSmbInternalStore {
+export class FapSmbInternalStore {
   isListLoading = false
   isSaving = false
   isDeleting = false
   isFileListLoading = false
   errorText = ''
-  items: FileAccessPointSmbInternalItem[] = []
+  items: FapSmbInternalItem[] = []
   selectedId = ''
   selectedPanel: 'config' | 'explore' = 'config'
-  fileItemsByFileAccessPointId: Record<string, FileAccessPointSmbInternalFileItem[]> = {}
+  fileItemsByFileAccessPointId: Record<string, FapSmbInternalFileItem[]> = {}
   pageIndexByFileAccessPointId: Record<string, number> = {}
   pageSizeByFileAccessPointId: Record<string, number> = {}
   totalCountByFileAccessPointId: Record<string, number> = {}
-  selectedFileIdByFileAccessPointId: Record<string, string> = {}
+  selectedFileIdsByFileAccessPointId: Record<string, string[]> = {}
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true })
   }
 
   get canWrite() {
-    return fileAccessPointStore.canWrite
+    return fapSmbExternalStore.canWrite
   }
 
   get selectedItem() {
@@ -67,10 +68,19 @@ export class FileAccessPointSmbInternalStore {
   }
 
   get selectedFileId() {
+    return this.selectedFileIds[0] || ''
+  }
+
+  get selectedFileIds() {
     if (!this.selectedId) {
-      return ''
+      return []
     }
-    return this.selectedFileIdByFileAccessPointId[this.selectedId] || ''
+    return this.selectedFileIdsByFileAccessPointId[this.selectedId] || []
+  }
+
+  get selectedFileItemList() {
+    const selectedIdSet = new Set(this.selectedFileIds)
+    return this.selectedFileItems.filter((item) => selectedIdSet.has(item.fileId))
   }
 
   get selectedPageIndex() {
@@ -111,8 +121,12 @@ export class FileAccessPointSmbInternalStore {
     this.selectedPanel = panel
   }
 
+  setSelectedFileIds(fileAccessPointId: string, fileIds: string[]) {
+    this.selectedFileIdsByFileAccessPointId[fileAccessPointId] = fileIds
+  }
+
   setSelectedFileId(fileAccessPointId: string, fileId: string) {
-    this.selectedFileIdByFileAccessPointId[fileAccessPointId] = fileId
+    this.setSelectedFileIds(fileAccessPointId, fileId ? [fileId] : [])
   }
 
   async requestLoadList() {
@@ -125,7 +139,7 @@ export class FileAccessPointSmbInternalStore {
     })
     try {
       const data = await requestAuthenticatedJson('/smb-internal-file-access-point/list')
-      const items = Array.isArray(data.items) ? (data.items as FileAccessPointSmbInternalItem[]) : []
+      const items = Array.isArray(data.items) ? (data.items as FapSmbInternalItem[]) : []
       runInAction(() => {
         this.items = items
         if (!this.selectedId || !items.find((item) => item.fileAccessPointId === this.selectedId)) {
@@ -150,9 +164,9 @@ export class FileAccessPointSmbInternalStore {
     if (!this.canWrite) {
       return { isSuccess: false, messageText: 'write permission required' }
     }
-    const fapSmbExternal = fileAccessPointStore.items[0]
+    const fapSmbExternal = fapSmbExternalStore.items[0]
     if (!fapSmbExternal) {
-      return { isSuccess: false, messageText: 'create smb/external file access point first' }
+      return { isSuccess: false, messageText: 'create FAP SMB external first' }
     }
     runInAction(() => {
       this.isSaving = true
@@ -282,14 +296,14 @@ export class FileAccessPointSmbInternalStore {
           pageSize,
         }),
       })
-      const items = Array.isArray(data.items) ? (data.items as FileAccessPointSmbInternalFileItem[]) : []
+      const items = Array.isArray(data.items) ? (data.items as FapSmbInternalFileItem[]) : []
       runInAction(() => {
         this.fileItemsByFileAccessPointId[fileAccessPointId] = items
         this.totalCountByFileAccessPointId[fileAccessPointId] = Number(data.totalCount || 0)
-        const selectedFileId = this.selectedFileIdByFileAccessPointId[fileAccessPointId]
-        if (!selectedFileId || !items.find((item) => item.fileId === selectedFileId)) {
-          this.selectedFileIdByFileAccessPointId[fileAccessPointId] = items[0]?.fileId || ''
-        }
+        const selectedFileIds = this.selectedFileIdsByFileAccessPointId[fileAccessPointId] || []
+        this.selectedFileIdsByFileAccessPointId[fileAccessPointId] = selectedFileIds.filter((fileId) => (
+          items.some((item) => item.fileId === fileId)
+        ))
       })
       return { isSuccess: true, messageText: 'loaded' }
     } catch (error: unknown) {
@@ -310,31 +324,42 @@ export class FileAccessPointSmbInternalStore {
     return this.requestLoadFiles(this.selectedId, pageIndexNext)
   }
 
-  async requestDownloadSelectedFile() {
-    if (!this.selectedItem || !this.selectedFileItem) {
+  async requestFileBlob(fileItem: FapSmbInternalFileItem): Promise<{ isSuccess: boolean, messageText: string, blob?: Blob }> {
+    if (!this.selectedItem || !fileItem) {
+      return { isSuccess: false, messageText: 'no file selected' }
+    }
+    const response = await requestAuthenticatedBlob('/smb-internal-file-access-point/file/download', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        fileAccessPointId: this.selectedItem.fileAccessPointId,
+        fileId: fileItem.fileId,
+      }),
+    })
+    const blob = await response.blob()
+    return { isSuccess: true, messageText: 'loaded', blob }
+  }
+
+  async requestDownloadFileItem(fileItem: FapSmbInternalFileItem) {
+    if (!this.selectedItem || !fileItem) {
       return { isSuccess: false, messageText: 'no file selected' }
     }
     try {
-      const response = await requestAuthenticatedBlob('/smb-internal-file-access-point/file/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileAccessPointId: this.selectedItem.fileAccessPointId,
-          fileId: this.selectedFileItem.fileId,
-        }),
-      })
-      const blob = await response.blob()
-      const downloadUrl = URL.createObjectURL(blob)
+      const result = await this.requestFileBlob(fileItem)
+      if (!result.isSuccess || !result.blob) {
+        return { isSuccess: false, messageText: result.messageText }
+      }
+      const downloadUrl = URL.createObjectURL(result.blob)
       const anchor = document.createElement('a')
       anchor.href = downloadUrl
-      anchor.download = this.selectedFileItem.fileName || `${this.selectedFileItem.fileId}.bin`
+      anchor.download = fileItem.fileName || `${fileItem.fileId}.bin`
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
       URL.revokeObjectURL(downloadUrl)
-      return { isSuccess: true, messageText: `downloaded ${this.selectedFileItem.fileName}` }
+      return { isSuccess: true, messageText: `downloaded ${fileItem.fileName}` }
     } catch (error: unknown) {
       runInAction(() => {
         this.errorText = String(error)
@@ -342,6 +367,32 @@ export class FileAccessPointSmbInternalStore {
       return { isSuccess: false, messageText: String(error) }
     }
   }
+
+  async requestDownloadSelectedFiles() {
+    const fileItems = this.selectedFileItemList
+    if (fileItems.length === 0) {
+      return { isSuccess: false, messageText: 'no file selected' }
+    }
+    let successCount = 0
+    for (const fileItem of fileItems) {
+      const result = await this.requestDownloadFileItem(fileItem)
+      if (result.isSuccess) {
+        successCount += 1
+      }
+    }
+    return {
+      isSuccess: successCount === fileItems.length,
+      messageText: `downloaded ${successCount}/${fileItems.length} file item(s)`,
+    }
+  }
 }
 
-export const fileAccessPointSmbInternalStore = new FileAccessPointSmbInternalStore()
+export function getFapSmbInternalSourceLabel(item: FapSmbInternalItem) {
+  const labelList = [item.sourceType === 'config' ? 'CONFIG' : 'DB']
+  if (item.isExample) {
+    labelList.push('EXAMPLE')
+  }
+  return labelList.join(', ')
+}
+
+export const fapSmbInternalStore = new FapSmbInternalStore()

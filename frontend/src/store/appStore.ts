@@ -1,19 +1,19 @@
 import { makeAutoObservable } from 'mobx'
 import { requestAuthenticatedJson } from '../../apiRequest'
-import { fileAccessPointStore } from './fileAccessPointStore'
-import { fileAccessPointSmbInternalStore } from './fileAccessPointSmbInternalStore'
+import { fapSmbExternalStore } from './fapSmbExternalStore'
+import { fapSmbInternalStore } from './fapSmbInternalStore'
 import { serviceStore } from './serviceStore'
 
 export const PAGE_KEY = {
   serviceMetadata: 'service-metadata',
   serviceBasicInfo: 'service-basic-info',
   serviceDatabase: 'service-database',
-  fileAccessPointOverview: 'file-access-point-overview',
-  fileAccessPointConfig: 'file-access-point-config',
-  fileAccessPointExplore: 'file-access-point-explore',
-  fileAccessPointSmbInternalOverview: 'file-access-point-smb-internal-overview',
-  fileAccessPointSmbInternalConfig: 'file-access-point-smb-internal-config',
-  fileAccessPointSmbInternalExplore: 'file-access-point-smb-internal-explore',
+  fapSmbExternalOverview: 'fap-smb-external-overview',
+  fapSmbExternalConfig: 'fap-smb-external-config',
+  fapSmbExternalExplore: 'fap-smb-external-explore',
+  fapSmbInternalOverview: 'fap-smb-internal-overview',
+  fapSmbInternalConfig: 'fap-smb-internal-config',
+  fapSmbInternalExplore: 'fap-smb-internal-explore',
 } as const
 
 class AppStore {
@@ -24,15 +24,15 @@ class AppStore {
   }
 
   get errorText() {
-    return fileAccessPointStore.errorText || fileAccessPointSmbInternalStore.errorText || serviceStore.errorText
+    return fapSmbExternalStore.errorText || fapSmbInternalStore.errorText || serviceStore.errorText
   }
 
   async bootstrap() {
     await requestAuthenticatedJson('/login/check')
     await Promise.all([serviceStore.requestPing(), serviceStore.requestDatabaseInfo()])
     await Promise.all([
-      fileAccessPointStore.requestLoadList(),
-      fileAccessPointSmbInternalStore.requestLoadList(),
+      fapSmbExternalStore.requestLoadList(),
+      fapSmbInternalStore.requestLoadList(),
     ])
   }
 
@@ -48,24 +48,24 @@ class AppStore {
     this.currentPageKey = pageKey
   }
 
-  selectFileAccessPointOverview() {
-    this.currentPageKey = PAGE_KEY.fileAccessPointOverview
+  selectFapSmbExternalOverview() {
+    this.currentPageKey = PAGE_KEY.fapSmbExternalOverview
   }
 
-  selectFileAccessPoint(fileAccessPointId: string, panel: 'config' | 'explore') {
-    fileAccessPointStore.setSelected(fileAccessPointId, panel)
-    this.currentPageKey = panel === 'config' ? PAGE_KEY.fileAccessPointConfig : PAGE_KEY.fileAccessPointExplore
+  selectFapSmbExternal(fileAccessPointId: string, panel: 'config' | 'explore') {
+    fapSmbExternalStore.setSelected(fileAccessPointId, panel)
+    this.currentPageKey = panel === 'config' ? PAGE_KEY.fapSmbExternalConfig : PAGE_KEY.fapSmbExternalExplore
   }
 
-  selectFileAccessPointSmbInternalOverview() {
-    this.currentPageKey = PAGE_KEY.fileAccessPointSmbInternalOverview
+  selectFapSmbInternalOverview() {
+    this.currentPageKey = PAGE_KEY.fapSmbInternalOverview
   }
 
-  selectFileAccessPointSmbInternal(fileAccessPointId: string, panel: 'config' | 'explore') {
-    fileAccessPointSmbInternalStore.setSelected(fileAccessPointId, panel)
+  selectFapSmbInternal(fileAccessPointId: string, panel: 'config' | 'explore') {
+    fapSmbInternalStore.setSelected(fileAccessPointId, panel)
     this.currentPageKey = panel === 'config'
-      ? PAGE_KEY.fileAccessPointSmbInternalConfig
-      : PAGE_KEY.fileAccessPointSmbInternalExplore
+      ? PAGE_KEY.fapSmbInternalConfig
+      : PAGE_KEY.fapSmbInternalExplore
   }
 }
 

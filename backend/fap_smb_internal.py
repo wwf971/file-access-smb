@@ -228,7 +228,7 @@ def _ensure_file_table(cursor, file_access_point_id: str):
               filePath text not null unique,
               fileType text not null default '',
               sizeBytes bigint not null default 0,
-              metadata jsonb not null default '{}'::jsonb,
+              metadata jsonb not null default '{{}}'::jsonb,
               isDeleted boolean not null default false,
               createdAt timestamptz not null default now(),
               updatedAt timestamptz not null default now(),
@@ -275,9 +275,38 @@ def _safe_config_file_access_point_id(name: str):
     return f"config_{safe_name}"
 
 
+def _is_example_internal_fap_config_item(key: str, raw_item: dict[str, Any], metadata: dict[str, Any]):
+    return (
+        key == "file_access_point_smb_internal_example"
+        or _to_bool(raw_item.get("isExample"))
+        or _to_bool(raw_item.get("is_example"))
+        or _to_bool(metadata.get("isExample"))
+        or _to_bool(metadata.get("is_example"))
+    )
+
+
+def _has_local_internal_fap_config():
+    config_path = get_dir_base() / "config" / "config.0.yaml"
+    if not config_path.is_file():
+        return False
+    with config_path.open("r", encoding="utf-8") as file_obj:
+        data = yaml.safe_load(file_obj) or {}
+    if not isinstance(data, dict):
+        return False
+    internal_config = data.get("file_access_point_smb_internal")
+    return isinstance(internal_config, dict) and len(internal_config) > 0
+
+
+def _filter_visible_internal_faps(item_list: list[dict[str, Any]]):
+    if len(item_list) <= 1:
+        return item_list
+    return [item for item in item_list if not item.get("isExample")]
+
+
 def _load_config_internal_faps():
     project_config = load_project_config(get_dir_base())
     raw_items = project_config.get("file_access_point_smb_internal") or {}
+    is_from_example_config = not _has_local_internal_fap_config()
     item_list = []
     for key, raw_item in raw_items.items():
         if not isinstance(raw_item, dict):
@@ -306,6 +335,7 @@ def _load_config_internal_faps():
                 "metadata": metadata_normalized,
                 "fileTableName": _get_file_access_point_table_name(file_access_point_id),
                 "sourceType": "config",
+                "isExample": is_from_example_config and _is_example_internal_fap_config_item(key, raw_item, metadata),
                 "isDeletable": False,
                 "createdAt": "",
                 "updatedAt": "",
@@ -436,7 +466,8 @@ def _list_internal_faps():
                 order by createdAt asc
                 """
             )
-            return [*_load_config_internal_faps(), *[_row_to_internal_fap(row) for row in cursor.fetchall() or []]]
+            item_list = [*_load_config_internal_faps(), *[_row_to_internal_fap(row) for row in cursor.fetchall() or []]]
+            return _filter_visible_internal_faps(item_list)
 
     return run_in_transaction(action)
 

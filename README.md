@@ -6,6 +6,8 @@ SMB network disk access service that does not require having the SMB disks mount
 - frontend: Vite + React + MobX
 - data: PostgreSQL (user-created SMB file access points)
 
+`fap` is used as a short name for file access point. In code, `fapSmbExternal` means an `smb/external` file access point, and `fapSmbInternal` means an `smb/internal` file access point.
+
 ## Documents:
 
 Documents are placed under `/doc/`, including:

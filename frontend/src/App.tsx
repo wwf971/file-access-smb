@@ -4,11 +4,11 @@ import { Login, SpinningCircle } from '@wwf971/react-comp-misc'
 import './App.css'
 import ResourceTree from './ResourceTree'
 import ResourcePanel from './ResourcePanel'
-import EditorTxt from './fileAccessPoint/EditorTxt'
-import UploadFile from './fileAccessPoint/UploadFile'
+import FapSmbExternalEditorTxt from './fapSmbExternal/FapSmbExternalEditorTxt'
+import FapSmbExternalUploadFile from './fapSmbExternal/FapSmbExternalUploadFile'
 import { appStore } from './store/appStore'
 import { authStore } from './store/authStore'
-import { fileAccessPointStore } from './store/fileAccessPointStore'
+import { fapSmbExternalStore } from './store/fapSmbExternalStore'
 
 const App = observer(() => {
   useEffect(() => {
@@ -53,19 +53,19 @@ const App = observer(() => {
           <ResourcePanel />
         </section>
       </div>
-      {fileAccessPointStore.isZipRunning ? (
+      {fapSmbExternalStore.isZipRunning ? (
         <div className="zip-overlay-root">
           <div className="zip-overlay-popup">
             <div className="zip-overlay-spinner-row">
               <SpinningCircle width={18} height={18} />
               <div className="zip-overlay-title">building zip archive</div>
             </div>
-            <div className="zip-overlay-log">{fileAccessPointStore.zipLatestLogText || 'running'}</div>
+            <div className="zip-overlay-log">{fapSmbExternalStore.zipLatestLogText || 'running'}</div>
             <button
               type="button"
               className="main-btn zip-abort-btn"
               onClick={() => {
-                fileAccessPointStore.requestAbortZip()
+                fapSmbExternalStore.requestAbortZip()
               }}
             >
               abort
@@ -73,8 +73,8 @@ const App = observer(() => {
           </div>
         </div>
       ) : null}
-      <EditorTxt />
-      <UploadFile />
+      <FapSmbExternalEditorTxt />
+      <FapSmbExternalUploadFile />
     </div>
   )
 })

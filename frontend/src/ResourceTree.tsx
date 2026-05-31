@@ -2,15 +2,15 @@ import { useMemo, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { TreeView } from '@wwf971/react-comp-misc'
 import { appStore, PAGE_KEY } from './store/appStore'
-import { fileAccessPointStore } from './store/fileAccessPointStore'
-import { fileAccessPointSmbInternalStore } from './store/fileAccessPointSmbInternalStore'
+import { fapSmbExternalStore } from './store/fapSmbExternalStore'
+import { fapSmbInternalStore, getFapSmbInternalSourceLabel } from './store/fapSmbInternalStore'
 
 const ResourceTree = observer(() => {
   const TreeViewComp = TreeView as any
   const [expandedById, setExpandedById] = useState<Record<string, boolean>>({
     service: true,
-    fileAccessPoints: true,
-    fileAccessPointsSmbInternal: true,
+    fapSmbExternal: true,
+    fapSmbInternal: true,
   })
 
   const treeData = useMemo(() => {
@@ -47,38 +47,38 @@ const ResourceTree = observer(() => {
         childrenIds: [],
         childrenLoadState: 'loaded',
       },
-      fileAccessPoints: {
-        id: 'fileAccessPoints',
-        text: `FileAccessPoint(SMB) (${fileAccessPointStore.items.length})`,
+      fapSmbExternal: {
+        id: 'fapSmbExternal',
+        text: `FAP SMB External (${fapSmbExternalStore.items.length})`,
         isLeaf: false,
-        isExpanded: expandedById.fileAccessPoints === true,
+        isExpanded: expandedById.fapSmbExternal === true,
         childrenIds: [
-          'fileAccessPoints:overview',
-          ...fileAccessPointStore.items.map((item) => `fap:${item.fileAccessPointId}`),
+          'fapSmbExternal:overview',
+          ...fapSmbExternalStore.items.map((item) => `fapSmbExternal:${item.fileAccessPointId}`),
         ],
-        childrenLoadState: fileAccessPointStore.isListLoading ? 'loading' : 'loaded',
+        childrenLoadState: fapSmbExternalStore.isListLoading ? 'loading' : 'loaded',
       },
-      fileAccessPointsSmbInternal: {
-        id: 'fileAccessPointsSmbInternal',
-        text: `FileAccessPoint(Internal) (${fileAccessPointSmbInternalStore.items.length})`,
+      fapSmbInternal: {
+        id: 'fapSmbInternal',
+        text: `FAP SMB Internal (${fapSmbInternalStore.items.length})`,
         isLeaf: false,
-        isExpanded: expandedById.fileAccessPointsSmbInternal === true,
+        isExpanded: expandedById.fapSmbInternal === true,
         childrenIds: [
-          'fileAccessPointsSmbInternal:overview',
-          ...fileAccessPointSmbInternalStore.items.map((item) => `fapSmbInternal:${item.fileAccessPointId}`),
+          'fapSmbInternal:overview',
+          ...fapSmbInternalStore.items.map((item) => `fapSmbInternal:${item.fileAccessPointId}`),
         ],
-        childrenLoadState: fileAccessPointSmbInternalStore.isListLoading ? 'loading' : 'loaded',
+        childrenLoadState: fapSmbInternalStore.isListLoading ? 'loading' : 'loaded',
       },
-      'fileAccessPointsSmbInternal:overview': {
-        id: 'fileAccessPointsSmbInternal:overview',
+      'fapSmbInternal:overview': {
+        id: 'fapSmbInternal:overview',
         text: 'OverView',
         isLeaf: true,
         isExpanded: false,
         childrenIds: [],
         childrenLoadState: 'loaded',
       },
-      'fileAccessPoints:overview': {
-        id: 'fileAccessPoints:overview',
+      'fapSmbExternal:overview': {
+        id: 'fapSmbExternal:overview',
         text: 'OverView',
         isLeaf: true,
         isExpanded: false,
@@ -86,19 +86,19 @@ const ResourceTree = observer(() => {
         childrenLoadState: 'loaded',
       },
     }
-    fileAccessPointStore.items.forEach((item) => {
+    fapSmbExternalStore.items.forEach((item) => {
       const sourceText = item.sourceType === 'config' ? 'CONFIG' : 'DB'
-      itemDataById[`fap:${item.fileAccessPointId}`] = {
-        id: `fap:${item.fileAccessPointId}`,
+      itemDataById[`fapSmbExternal:${item.fileAccessPointId}`] = {
+        id: `fapSmbExternal:${item.fileAccessPointId}`,
         text: `${item.name} [${sourceText}]`,
         isLeaf: false,
-        isExpanded: expandedById[`fap:${item.fileAccessPointId}`] === true,
-        childrenIds: [`fap:${item.fileAccessPointId}:config`, `fap:${item.fileAccessPointId}:explore`],
+        isExpanded: expandedById[`fapSmbExternal:${item.fileAccessPointId}`] === true,
+        childrenIds: [`fapSmbExternal:${item.fileAccessPointId}:config`, `fapSmbExternal:${item.fileAccessPointId}:explore`],
         childrenLoadState: 'loaded',
         fileAccessPointId: item.fileAccessPointId,
       }
-      itemDataById[`fap:${item.fileAccessPointId}:config`] = {
-        id: `fap:${item.fileAccessPointId}:config`,
+      itemDataById[`fapSmbExternal:${item.fileAccessPointId}:config`] = {
+        id: `fapSmbExternal:${item.fileAccessPointId}:config`,
         text: 'config',
         isLeaf: true,
         isExpanded: false,
@@ -107,8 +107,8 @@ const ResourceTree = observer(() => {
         fileAccessPointId: item.fileAccessPointId,
         panel: 'config',
       }
-      itemDataById[`fap:${item.fileAccessPointId}:explore`] = {
-        id: `fap:${item.fileAccessPointId}:explore`,
+      itemDataById[`fapSmbExternal:${item.fileAccessPointId}:explore`] = {
+        id: `fapSmbExternal:${item.fileAccessPointId}:explore`,
         text: 'explore',
         isLeaf: true,
         isExpanded: false,
@@ -118,8 +118,8 @@ const ResourceTree = observer(() => {
         panel: 'explore',
       }
     })
-    fileAccessPointSmbInternalStore.items.forEach((item) => {
-      const sourceText = item.sourceType === 'config' ? 'CONFIG' : 'DB'
+    fapSmbInternalStore.items.forEach((item) => {
+      const sourceText = getFapSmbInternalSourceLabel(item)
       itemDataById[`fapSmbInternal:${item.fileAccessPointId}`] = {
         id: `fapSmbInternal:${item.fileAccessPointId}`,
         text: `${item.name} [${sourceText}]`,
@@ -130,7 +130,7 @@ const ResourceTree = observer(() => {
           `fapSmbInternal:${item.fileAccessPointId}:explore`,
         ],
         childrenLoadState: 'loaded',
-        fileAccessPointSmbInternalId: item.fileAccessPointId,
+        fapSmbInternalId: item.fileAccessPointId,
       }
       itemDataById[`fapSmbInternal:${item.fileAccessPointId}:config`] = {
         id: `fapSmbInternal:${item.fileAccessPointId}:config`,
@@ -139,7 +139,7 @@ const ResourceTree = observer(() => {
         isExpanded: false,
         childrenIds: [],
         childrenLoadState: 'loaded',
-        fileAccessPointSmbInternalId: item.fileAccessPointId,
+        fapSmbInternalId: item.fileAccessPointId,
         panel: 'config',
       }
       itemDataById[`fapSmbInternal:${item.fileAccessPointId}:explore`] = {
@@ -149,20 +149,20 @@ const ResourceTree = observer(() => {
         isExpanded: false,
         childrenIds: [],
         childrenLoadState: 'loaded',
-        fileAccessPointSmbInternalId: item.fileAccessPointId,
+        fapSmbInternalId: item.fileAccessPointId,
         panel: 'explore',
       }
     })
     return {
-      rootItemIds: ['service', 'fileAccessPoints', 'fileAccessPointsSmbInternal'],
+      rootItemIds: ['service', 'fapSmbExternal', 'fapSmbInternal'],
       itemDataById,
     }
   }, [
     expandedById,
-    fileAccessPointStore.items,
-    fileAccessPointStore.isListLoading,
-    fileAccessPointSmbInternalStore.items,
-    fileAccessPointSmbInternalStore.isListLoading,
+    fapSmbExternalStore.items,
+    fapSmbExternalStore.isListLoading,
+    fapSmbInternalStore.items,
+    fapSmbInternalStore.isListLoading,
   ])
 
   return (
@@ -176,19 +176,19 @@ const ResourceTree = observer(() => {
             ? 'service:basic-info'
           : appStore.currentPageKey === PAGE_KEY.serviceDatabase
             ? 'service:database'
-          : appStore.currentPageKey === PAGE_KEY.fileAccessPointOverview
-            ? 'fileAccessPoints:overview'
-          : appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalOverview
-            ? 'fileAccessPointsSmbInternal:overview'
-          : fileAccessPointSmbInternalStore.selectedId
+          : appStore.currentPageKey === PAGE_KEY.fapSmbExternalOverview
+            ? 'fapSmbExternal:overview'
+          : appStore.currentPageKey === PAGE_KEY.fapSmbInternalOverview
+            ? 'fapSmbInternal:overview'
+          : fapSmbInternalStore.selectedId
             && (
-              appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalConfig
-              || appStore.currentPageKey === PAGE_KEY.fileAccessPointSmbInternalExplore
+              appStore.currentPageKey === PAGE_KEY.fapSmbInternalConfig
+              || appStore.currentPageKey === PAGE_KEY.fapSmbInternalExplore
             )
-            ? `fapSmbInternal:${fileAccessPointSmbInternalStore.selectedId}:${fileAccessPointSmbInternalStore.selectedPanel}`
-          : fileAccessPointStore.selectedId
-            ? `fap:${fileAccessPointStore.selectedId}:${fileAccessPointStore.selectedPanel}`
-            : 'fileAccessPoints'
+            ? `fapSmbInternal:${fapSmbInternalStore.selectedId}:${fapSmbInternalStore.selectedPanel}`
+          : fapSmbExternalStore.selectedId
+            ? `fapSmbExternal:${fapSmbExternalStore.selectedId}:${fapSmbExternalStore.selectedPanel}`
+            : 'fapSmbExternal'
       }
       onDataChangeRequest={async (type: string, params: any) => {
         if (type !== 'toggle-expand') return { code: 0 }
@@ -213,28 +213,28 @@ const ResourceTree = observer(() => {
           appStore.selectServicePage(PAGE_KEY.serviceDatabase)
           return
         }
-        if (itemId === 'fileAccessPoints:overview' || itemId === 'fileAccessPoints') {
-          appStore.selectFileAccessPointOverview()
+        if (itemId === 'fapSmbExternal:overview' || itemId === 'fapSmbExternal') {
+          appStore.selectFapSmbExternalOverview()
           return
         }
-        if (itemId === 'fileAccessPointsSmbInternal:overview' || itemId === 'fileAccessPointsSmbInternal') {
-          appStore.selectFileAccessPointSmbInternalOverview()
+        if (itemId === 'fapSmbInternal:overview' || itemId === 'fapSmbInternal') {
+          appStore.selectFapSmbInternalOverview()
           return
         }
-        if (itemData?.fileAccessPointSmbInternalId && itemData?.panel) {
-          appStore.selectFileAccessPointSmbInternal(String(itemData.fileAccessPointSmbInternalId), itemData.panel)
+        if (itemData?.fapSmbInternalId && itemData?.panel) {
+          appStore.selectFapSmbInternal(String(itemData.fapSmbInternalId), itemData.panel)
           return
         }
-        if (itemData?.fileAccessPointSmbInternalId) {
-          appStore.selectFileAccessPointSmbInternal(String(itemData.fileAccessPointSmbInternalId), 'config')
+        if (itemData?.fapSmbInternalId) {
+          appStore.selectFapSmbInternal(String(itemData.fapSmbInternalId), 'config')
           return
         }
         if (itemData?.fileAccessPointId && itemData?.panel) {
-          appStore.selectFileAccessPoint(String(itemData.fileAccessPointId), itemData.panel)
+          appStore.selectFapSmbExternal(String(itemData.fileAccessPointId), itemData.panel)
           return
         }
         if (itemData?.fileAccessPointId) {
-          appStore.selectFileAccessPoint(String(itemData.fileAccessPointId), 'config')
+          appStore.selectFapSmbExternal(String(itemData.fileAccessPointId), 'config')
         }
       }}
     />
