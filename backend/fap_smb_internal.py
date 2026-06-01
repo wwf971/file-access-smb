@@ -231,11 +231,23 @@ def _ensure_file_table(cursor, file_access_point_id: str):
               metadata jsonb not null default '{{}}'::jsonb,
               isDeleted boolean not null default false,
               createdAt timestamptz not null default now(),
+              createAtTimeZone integer not null default 0,
               updatedAt timestamptz not null default now(),
+              updateAtTimeZone integer not null default 0,
               deletedAt timestamptz
             )
             """
         ).format(sql.Identifier(table_name))
+    )
+    cursor.execute(
+        sql.SQL("alter table {} add column if not exists createAtTimeZone integer not null default 0").format(
+            sql.Identifier(table_name)
+        )
+    )
+    cursor.execute(
+        sql.SQL("alter table {} add column if not exists updateAtTimeZone integer not null default 0").format(
+            sql.Identifier(table_name)
+        )
     )
     cursor.execute(
         sql.SQL("create index if not exists {} on {} (createdAt)").format(
@@ -414,7 +426,9 @@ def _row_to_file(row):
         "metadata": row["metadata"] if isinstance(row["metadata"], dict) else {},
         "isDeleted": bool(row["isdeleted"]),
         "createdAt": str(row["createdat"] or ""),
+        "createAtTimeZone": int(row["createattimezone"] or 0),
         "updatedAt": str(row["updatedat"] or ""),
+        "updateAtTimeZone": int(row["updateattimezone"] or 0),
         "deletedAt": str(row["deletedat"] or ""),
     }
 
@@ -433,7 +447,9 @@ def _get_file_by_id_db(cursor, table_name: str, file_id: str, include_deleted: b
                 metadata,
                 isDeleted,
                 createdAt,
+                createAtTimeZone,
                 updatedAt,
+                updateAtTimeZone,
                 deletedAt
             from {}
             where fileId = %s
@@ -621,7 +637,9 @@ def register_fap_smb_internal_routes(app, make_json_response):
                             metadata,
                             isDeleted,
                             createdAt,
+                            createAtTimeZone,
                             updatedAt,
+                            updateAtTimeZone,
                             deletedAt
                         from {}
                         where isDeleted = false
@@ -809,31 +827,33 @@ def register_fap_smb_internal_routes(app, make_json_response):
                         source_path_external,
                         target_path_external,
                     )
-                cursor.execute(
-                    sql.SQL(
-                        """
-                        update {}
-                        set
-                            fileName = %s,
-                            filePath = %s,
-                            updatedAt = now()
-                        where fileId = %s and isDeleted = false
-                        """
-                    ).format(sql.Identifier(table_name)),
-                    (file_name_next, file_path_next, file_id),
-                )
-                file_info_next = _get_file_by_id_db(cursor, table_name, file_id)
-                metadata_backup_path = _write_metadata_backup(
-                    internal_fap,
-                    fap_smb_external,
-                    {
-                        "operation": "move",
-                        "fileAccessPointId": file_access_point_id,
-                        "fileBefore": file_info,
-                        "fileAfter": file_info_next,
-                    },
-                )
-                return {"file": file_info_next, "metadataBackupPath": metadata_backup_path}
+                try:
+                    cursor.execute(
+                        sql.SQL(
+                            """
+                            update {}
+                            set
+                                fileName = %s,
+                                filePath = %s,
+                                updatedAt = now()
+                            where fileId = %s and isDeleted = false
+                            """
+                        ).format(sql.Identifier(table_name)),
+                        (file_name_next, file_path_next, file_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise RuntimeError(f"file row update failed: {file_id}")
+                    file_info_next = _get_file_by_id_db(cursor, table_name, file_id)
+                except Exception:
+                    if source_path_external != target_path_external:
+                        smb_connection_manager.move_file(
+                            str(fap_smb_external["fileAccessPointId"]),
+                            fap_smb_external["metadata"],
+                            target_path_external,
+                            source_path_external,
+                        )
+                    raise
+                return {"file": file_info_next}
 
         try:
             return make_json_response(0, data=run_in_transaction(action))
@@ -874,7 +894,9 @@ def register_fap_smb_internal_routes(app, make_json_response):
                             metadata,
                             isDeleted,
                             createdAt,
+                            createAtTimeZone,
                             updatedAt,
+                            updateAtTimeZone,
                             deletedAt
                         from {}
                         where isDeleted = false

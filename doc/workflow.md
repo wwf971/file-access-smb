@@ -14,4 +14,5 @@ Reference docs:
 - backend behavior: `./backend.md`
 - api endpoints: `./api.md`
 - schema: `./database.md`
-- file access point model: `./file_access_point.md`
+- SMB external file access point model: `./file_access_point_smb_external.md`
+- SMB internal file access point model: `./file_access_point_smb_internal.md`

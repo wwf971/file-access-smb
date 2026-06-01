@@ -27,4 +27,5 @@ Runtime:
 Details:
 
 - endpoint list: `./api.md`
-- SMB file access point model: `./file_access_point.md`
+- SMB external file access point model: `./file_access_point_smb_external.md`
+- SMB internal file access point model: `./file_access_point_smb_internal.md`

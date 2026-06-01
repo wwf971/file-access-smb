@@ -33,7 +33,9 @@ Per SMB internal file table:
   - `metadata` jsonb
   - `isDeleted` boolean
   - `createdAt` timestamptz
+  - `createAtTimeZone` integer
   - `updatedAt` timestamptz
+  - `updateAtTimeZone` integer
   - `deletedAt` timestamptz
 
 `files_{fapId}` is created when an SMB internal file access point is created or first used. The table name uses the internal file access point id and only allows lowercase letters, digits, and underscore.
@@ -56,6 +58,8 @@ SMB internal storage layout:
 ```
 
 Name matching is case-sensitive. The timestamp uses the project format, for example `20260520_23250530+09`.
+
+When migrating old `local/internal` file docs, `createdAt` is populated from old `createAt`, `updatedAt` is populated from old `updateAt`, and second, millisecond, microsecond, or nanosecond epoch values are normalized only if they fall in 2020-2030. `createAtTimeZone` and `updateAtTimeZone` preserve the old integer-hour timezone fields.
 
 Expected failure cases:
 

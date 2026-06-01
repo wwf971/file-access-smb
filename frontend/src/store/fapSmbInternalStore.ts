@@ -29,7 +29,9 @@ export type FapSmbInternalFileItem = {
   metadata: Record<string, unknown>
   isDeleted: boolean
   createdAt: string
+  createAtTimeZone: number
   updatedAt: string
+  updateAtTimeZone: number
   deletedAt: string
 }
 
@@ -47,6 +49,9 @@ export class FapSmbInternalStore {
   pageSizeByFileAccessPointId: Record<string, number> = {}
   totalCountByFileAccessPointId: Record<string, number> = {}
   selectedFileIdsByFileAccessPointId: Record<string, string[]> = {}
+  editingFileIdByFileAccessPointId: Record<string, string> = {}
+  editingFileNameByFileAccessPointId: Record<string, string> = {}
+  renamingFileIdByFileAccessPointId: Record<string, string> = {}
 
   constructor() {
     makeAutoObservable(this, {}, { autoBind: true })
@@ -108,6 +113,18 @@ export class FapSmbInternalStore {
     return this.selectedFileItems.find((item) => item.fileId === fileId) || null
   }
 
+  get selectedEditingFileId() {
+    return this.editingFileIdByFileAccessPointId[this.selectedId] || ''
+  }
+
+  get selectedEditingFileName() {
+    return this.editingFileNameByFileAccessPointId[this.selectedId] || ''
+  }
+
+  get selectedRenamingFileId() {
+    return this.renamingFileIdByFileAccessPointId[this.selectedId] || ''
+  }
+
   getPageIndex(fileAccessPointId: string) {
     return this.pageIndexByFileAccessPointId[fileAccessPointId] || 0
   }
@@ -127,6 +144,11 @@ export class FapSmbInternalStore {
 
   setSelectedFileId(fileAccessPointId: string, fileId: string) {
     this.setSelectedFileIds(fileAccessPointId, fileId ? [fileId] : [])
+  }
+
+  setEditingFile(fileAccessPointId: string, fileId: string, fileName = '') {
+    this.editingFileIdByFileAccessPointId[fileAccessPointId] = fileId
+    this.editingFileNameByFileAccessPointId[fileAccessPointId] = fileName
   }
 
   async requestLoadList() {
@@ -300,6 +322,14 @@ export class FapSmbInternalStore {
       runInAction(() => {
         this.fileItemsByFileAccessPointId[fileAccessPointId] = items
         this.totalCountByFileAccessPointId[fileAccessPointId] = Number(data.totalCount || 0)
+        const existingFileIdSet = new Set(items.map((item) => item.fileId))
+        if (!existingFileIdSet.has(this.editingFileIdByFileAccessPointId[fileAccessPointId])) {
+          this.editingFileIdByFileAccessPointId[fileAccessPointId] = ''
+          this.editingFileNameByFileAccessPointId[fileAccessPointId] = ''
+        }
+        if (!existingFileIdSet.has(this.renamingFileIdByFileAccessPointId[fileAccessPointId])) {
+          this.renamingFileIdByFileAccessPointId[fileAccessPointId] = ''
+        }
         const selectedFileIds = this.selectedFileIdsByFileAccessPointId[fileAccessPointId] || []
         this.selectedFileIdsByFileAccessPointId[fileAccessPointId] = selectedFileIds.filter((fileId) => (
           items.some((item) => item.fileId === fileId)
@@ -383,6 +413,57 @@ export class FapSmbInternalStore {
     return {
       isSuccess: successCount === fileItems.length,
       messageText: `downloaded ${successCount}/${fileItems.length} file item(s)`,
+    }
+  }
+
+  async requestRenameFileItem(fileItem: FapSmbInternalFileItem, fileNameNext: string) {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required' }
+    }
+    if (!this.selectedItem || !fileItem) {
+      return { isSuccess: false, messageText: 'no file selected' }
+    }
+    const fileAccessPointId = this.selectedItem.fileAccessPointId
+    if (this.renamingFileIdByFileAccessPointId[fileAccessPointId]) {
+      return { isSuccess: false, messageText: 'rename is in progress' }
+    }
+    const normalizedFileNameNext = String(fileNameNext || '').trim()
+    if (!normalizedFileNameNext) {
+      return { isSuccess: false, messageText: 'name is required' }
+    }
+    runInAction(() => {
+      this.renamingFileIdByFileAccessPointId[fileAccessPointId] = fileItem.fileId
+    })
+    try {
+      const data = await requestAuthenticatedJson('/smb-internal-file-access-point/file/move', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId,
+          fileId: fileItem.fileId,
+          fileNameNext: normalizedFileNameNext,
+        }),
+      })
+      const fileNext = data.file as FapSmbInternalFileItem | undefined
+      runInAction(() => {
+        const currentItems = this.fileItemsByFileAccessPointId[fileAccessPointId] || []
+        this.fileItemsByFileAccessPointId[fileAccessPointId] = currentItems.map((item) => (
+          item.fileId === fileItem.fileId && fileNext ? fileNext : item
+        ))
+        this.editingFileIdByFileAccessPointId[fileAccessPointId] = ''
+        this.editingFileNameByFileAccessPointId[fileAccessPointId] = ''
+      })
+      return { isSuccess: true, messageText: `renamed to ${normalizedFileNameNext}` }
+    } catch (error: unknown) {
+      runInAction(() => {
+        this.errorText = String(error)
+        this.editingFileIdByFileAccessPointId[fileAccessPointId] = ''
+        this.editingFileNameByFileAccessPointId[fileAccessPointId] = ''
+      })
+      return { isSuccess: false, messageText: String(error) }
+    } finally {
+      runInAction(() => {
+        this.renamingFileIdByFileAccessPointId[fileAccessPointId] = ''
+      })
     }
   }
 }

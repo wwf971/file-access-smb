@@ -17,7 +17,8 @@ Documents are placed under `/doc/`, including:
 - `/doc/backend.md`
 - `/doc/api.md`
 - `/doc/database.md`
-- `/doc/file_access_point.md`
+- `/doc/file_access_point_smb_external.md`
+- `/doc/file_access_point_smb_internal.md`
 - `/doc/dir_config.md`
 
 ## Config

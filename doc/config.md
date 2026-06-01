@@ -69,4 +69,5 @@ file_access_point_smb_internal:
 Related docs:
 
 - database details: `./database.md`
-- file access point behavior: `./file_access_point.md`
+- SMB external file access point behavior: `./file_access_point_smb_external.md`
+- SMB internal file access point behavior: `./file_access_point_smb_internal.md`

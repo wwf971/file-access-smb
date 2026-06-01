@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { FolderView, MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
 import { fapSmbInternalStore, getFapSmbInternalSourceLabel, type FapSmbInternalFileItem } from '../store/fapSmbInternalStore'
@@ -6,14 +6,16 @@ import { fapSmbInternalStore, getFapSmbInternalSourceLabel, type FapSmbInternalF
 const FOLDER_COLUMNS = {
   name: { data: 'name', align: 'left' },
   type: { data: 'type', align: 'left' },
+  fileId: { data: 'fileId', align: 'left' },
   size: { data: 'size', align: 'left' },
   created: { data: 'created', align: 'left' },
 }
 
-const FOLDER_COLUMNS_ORDER = ['name', 'type', 'size', 'created']
+const FOLDER_COLUMNS_ORDER = ['name', 'type', 'fileId', 'size', 'created']
 const FOLDER_COLUMNS_SIZE = {
   name: { width: 260, minWidth: 140, resizable: true },
   type: { width: 120, minWidth: 80, resizable: true },
+  fileId: { width: 130, minWidth: 90, resizable: true },
   size: { width: 90, minWidth: 70, resizable: true },
   created: { width: 190, minWidth: 120, resizable: true },
 }
@@ -25,6 +27,132 @@ const isImageFile = (fileItem: FapSmbInternalFileItem | null) => {
   const fileType = String(fileItem.fileType || '').toLowerCase()
   const fileName = String(fileItem.fileName || '').toLowerCase()
   return fileType.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(fileName)
+}
+
+const padDatePart = (value: number, length = 2) => String(value).padStart(length, '0')
+
+const parseBackendDate = (dateText: string) => {
+  const match = String(dateText || '').trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?([+-]\d{2})(?::?(\d{2}))?$/,
+  )
+  if (!match) {
+    return null
+  }
+  const offsetSign = match[8].startsWith('-') ? -1 : 1
+  const offsetHour = Math.abs(Number(match[8]))
+  const offsetMinute = Number(match[9] || 0)
+  const offsetMs = offsetSign * ((offsetHour * 60 + offsetMinute) * 60 * 1000)
+  const millisecond = Number(String(match[7] || '0').slice(0, 3).padEnd(3, '0'))
+  return new Date(Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5]),
+    Number(match[6]),
+    millisecond,
+  ) - offsetMs)
+}
+
+const formatBackendDateWithTimeZone = (dateText: string, timeZoneHour: number) => {
+  const dateValue = parseBackendDate(dateText)
+  if (!dateValue) {
+    return dateText || '-'
+  }
+  const normalizedTimeZoneHour = Number(timeZoneHour || 0)
+  const shiftedDate = new Date(dateValue.getTime() + normalizedTimeZoneHour * 60 * 60 * 1000)
+  const signText = normalizedTimeZoneHour >= 0 ? '+' : '-'
+  return [
+    `${shiftedDate.getUTCFullYear()}-${padDatePart(shiftedDate.getUTCMonth() + 1)}-${padDatePart(shiftedDate.getUTCDate())}`,
+    `${padDatePart(shiftedDate.getUTCHours())}:${padDatePart(shiftedDate.getUTCMinutes())}:${padDatePart(shiftedDate.getUTCSeconds())}`,
+    `UTC${signText}${padDatePart(Math.abs(normalizedTimeZoneHour))}`,
+  ].join(' ')
+}
+
+type NameCellProps = {
+  rowId: string
+  name: string
+  isEditing: boolean
+  isRenaming: boolean
+  isRowLocked: boolean
+  onStartEditing: () => void
+  onCancelEditing: () => void
+  onCommitEditing: (nextName: string) => void
+}
+
+const NameCell = ({
+  rowId,
+  name,
+  isEditing,
+  isRenaming,
+  isRowLocked,
+  onStartEditing,
+  onCancelEditing,
+  onCommitEditing,
+}: NameCellProps) => {
+  const editRef = React.useRef<HTMLDivElement | null>(null)
+  const isFinishingRef = React.useRef(false)
+
+  React.useEffect(() => {
+    isFinishingRef.current = false
+    if (!isEditing || !editRef.current) {
+      return
+    }
+    editRef.current.focus()
+    const range = document.createRange()
+    range.selectNodeContents(editRef.current)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }, [isEditing, rowId])
+
+  return (
+    <div className={`explore-name-cell ${isRowLocked ? 'is-locked' : ''}`}>
+      <div
+        ref={editRef}
+        className={`explore-name-content ${isEditing ? 'is-editing' : ''}`}
+        contentEditable={isEditing}
+        suppressContentEditableWarning={true}
+        onDoubleClick={() => {
+          if (isRowLocked) {
+            return
+          }
+          onStartEditing()
+        }}
+        onBlur={(event) => {
+          if (!isEditing || isFinishingRef.current) {
+            return
+          }
+          isFinishingRef.current = true
+          onCommitEditing(String(event.currentTarget.textContent || '').trim())
+        }}
+        onKeyDown={(event) => {
+          if (!isEditing) {
+            return
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            isFinishingRef.current = true
+            onCommitEditing(String(event.currentTarget.textContent || '').trim())
+            return
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            isFinishingRef.current = true
+            onCancelEditing()
+          }
+        }}
+      >
+        {name}
+      </div>
+      {isRenaming ? (
+        <span className="explore-name-spinner">
+          <SpinningCircle width={12} height={12} />
+        </span>
+      ) : null}
+    </div>
+  )
 }
 
 const getElementUnderMenu = (event: MouseEvent) => {
@@ -79,14 +207,47 @@ const FapSmbInternalExplorePanel = observer(() => {
     return <div className="panel-title">No FAP SMB internal selected</div>
   }
 
+  const canWrite = fapSmbInternalStore.canWrite
+  const editingFileId = fapSmbInternalStore.selectedEditingFileId
+  const editingFileName = fapSmbInternalStore.selectedEditingFileName
+  const renamingFileId = fapSmbInternalStore.selectedRenamingFileId
   const rows = fapSmbInternalStore.selectedFileItems.map((fileItem) => ({
     id: fileItem.fileId,
     data: {
-      name: fileItem.fileName,
+      name: (
+        <NameCell
+          rowId={fileItem.fileId}
+          name={editingFileId === fileItem.fileId ? (editingFileName || fileItem.fileName) : fileItem.fileName}
+          isEditing={editingFileId === fileItem.fileId}
+          isRenaming={renamingFileId === fileItem.fileId}
+          isRowLocked={!canWrite || Boolean(renamingFileId)}
+          onStartEditing={() => {
+            fapSmbInternalStore.setSelectedFileId(item.fileAccessPointId, fileItem.fileId)
+            fapSmbInternalStore.setEditingFile(item.fileAccessPointId, fileItem.fileId, fileItem.fileName)
+          }}
+          onCancelEditing={() => {
+            fapSmbInternalStore.setEditingFile(item.fileAccessPointId, '', '')
+          }}
+          onCommitEditing={async (nextName: string) => {
+            if (!nextName || nextName === fileItem.fileName) {
+              fapSmbInternalStore.setEditingFile(item.fileAccessPointId, '', '')
+              return
+            }
+            setMessageState({ status: 'loading', messageText: `renaming ${fileItem.fileName} to ${nextName}` })
+            const result = await fapSmbInternalStore.requestRenameFileItem(fileItem, nextName)
+            setMessageState({
+              status: result?.isSuccess ? 'success' : 'error',
+              messageText: result?.messageText || '',
+            })
+          }}
+        />
+      ),
       type: fileItem.fileType || '-',
+      fileId: fileItem.fileId,
       size: String(fileItem.sizeBytes),
-      created: fileItem.createdAt || '-',
+      created: formatBackendDateWithTimeZone(fileItem.createdAt, fileItem.createAtTimeZone),
     },
+    rowClassName: renamingFileId === fileItem.fileId ? 'explore-row-renaming' : '',
   }))
 
   const runLoadPage = async (pageIndex: number) => {
@@ -311,7 +472,13 @@ const FapSmbInternalExplorePanel = observer(() => {
                 type: 'item',
                 name: 'Preview Image',
                 data: { action: 'preview-image' },
-                disabled: !isImageFile(getFileItemById(contextMenuState.rowId)),
+                disabled: !isImageFile(getFileItemById(contextMenuState.rowId)) || Boolean(renamingFileId),
+              },
+              {
+                type: 'item',
+                name: 'Rename',
+                data: { action: 'rename' },
+                disabled: !canWrite || !contextMenuState.rowId || Boolean(renamingFileId),
               },
             ],
             position: contextMenuState.position,
@@ -338,6 +505,10 @@ const FapSmbInternalExplorePanel = observer(() => {
             }
             if (menuItem?.data?.action === 'preview-image') {
               runPreviewImage(fileItem)
+            }
+            if (menuItem?.data?.action === 'rename' && fileItem && canWrite) {
+              fapSmbInternalStore.setSelectedFileId(item.fileAccessPointId, fileItem.fileId)
+              fapSmbInternalStore.setEditingFile(item.fileAccessPointId, fileItem.fileId, fileItem.fileName)
             }
             closeContextMenu()
           }}
