@@ -16,6 +16,7 @@ Metadata:
 
 - file access point metadata is stored in PostgreSQL table `smb_internal_file_access_point`
 - per-file metadata is stored in the PostgreSQL table `files_{fapId}`
+- per-file timezone fields use UTC offset in minutes, for example `540` is displayed as `UTC+0900`
 - the SMB subfolder `pathRoot/metadata/` is only for explicit backup files
 - normal operations should not read from `pathRoot/metadata/`
 - normal operations should not create or write files in `pathRoot/metadata/`

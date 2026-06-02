@@ -49,6 +49,7 @@ SMB internal notes:
 - `create/update` accepts `name`, `fileAccessPointSmbExternalInfo`, `pathRoot`, and `metadata`
 - `fileAccessPointSmbExternalInfo` can be `{ "id": "..." }` or `{ "name": "..." }`; name matching is case-sensitive
 - `file/list` accepts `pageIndex` and `pageSize`, and returns `items`, `totalCount`, `pageIndex`, and `pageSize`
+- `file/list` item timezone fields use minute offsets from UTC, for example `createAtTimeZone: 540`
 - file upload accepts multipart form fields `fileAccessPointId`, `file`, optional `fileName`, `fileType`, and `metadata`
 - file operations use the SMB internal `fileAccessPointId` and `fileId`
 - `filePath` is stored relative to the internal `/files/` folder

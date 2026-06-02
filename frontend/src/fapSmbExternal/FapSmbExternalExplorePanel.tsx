@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
 import { FolderView, MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
 import {
@@ -97,6 +97,18 @@ function getFileSuffix(fileName: string) {
     return ''
   }
   return lowerName.slice(dotIndex)
+}
+
+function isImageFileName(fileName: string) {
+  return /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(String(fileName || '').toLowerCase())
+}
+
+function isPdfFileName(fileName: string) {
+  return String(fileName || '').toLowerCase().endsWith('.pdf')
+}
+
+function isPreviewableExploreItem(exploreItem: { name: string, isDirectory: boolean } | null): exploreItem is { name: string, isDirectory: boolean } {
+  return Boolean(exploreItem && !exploreItem.isDirectory && (isImageFileName(exploreItem.name) || isPdfFileName(exploreItem.name)))
 }
 
 function buildTextEditorCheck(fileName: string, sizeBytes: number) {
@@ -267,6 +279,23 @@ const FapSmbExternalExplorePanel = observer(() => {
     messageText: '',
     targetPath: '',
   })
+  const [filePreviewState, setFilePreviewState] = useState<{
+    fileName: string
+    fileUrl: string
+    fileKind: 'image' | 'pdf'
+  }>({
+    fileName: '',
+    fileUrl: '',
+    fileKind: 'image',
+  })
+
+  useEffect(() => {
+    return () => {
+      if (filePreviewState.fileUrl) {
+        URL.revokeObjectURL(filePreviewState.fileUrl)
+      }
+    }
+  }, [filePreviewState.fileUrl])
 
   const runExplore = async (path: string) => {
     setMessageState({
@@ -314,6 +343,62 @@ const FapSmbExternalExplorePanel = observer(() => {
         messageText: String(error),
       })
     }
+  }
+
+  const runPreviewFile = async (exploreItem: { name: string, isDirectory: boolean } | null) => {
+    if (!item || !exploreState || !isPreviewableExploreItem(exploreItem)) {
+      setMessageState({
+        status: 'error',
+        messageText: 'selected file is not previewable',
+      })
+      return
+    }
+    if (filePreviewState.fileUrl) {
+      URL.revokeObjectURL(filePreviewState.fileUrl)
+    }
+    const targetPath = buildNextPath(exploreState.path || '/', exploreItem.name)
+    setMessageState({
+      status: 'loading',
+      messageText: `Loading preview: ${targetPath}`,
+    })
+    try {
+      const result = await fapSmbExternalStore.requestExploreFileBlob(item.fileAccessPointId, targetPath)
+      if (!result.isSuccess || !result.blob) {
+        setMessageState({
+          status: 'error',
+          messageText: result.messageText,
+        })
+        return
+      }
+      const fileKind = isPdfFileName(exploreItem.name) ? 'pdf' : 'image'
+      const previewBlob = fileKind === 'pdf' ? new Blob([result.blob], { type: 'application/pdf' }) : result.blob
+      const fileUrl = URL.createObjectURL(previewBlob)
+      setFilePreviewState({
+        fileName: exploreItem.name,
+        fileUrl,
+        fileKind,
+      })
+      setMessageState({
+        status: 'success',
+        messageText: `Preview loaded: ${targetPath}`,
+      })
+    } catch (error: unknown) {
+      setMessageState({
+        status: 'error',
+        messageText: String(error),
+      })
+    }
+  }
+
+  const closeFilePreview = () => {
+    if (filePreviewState.fileUrl) {
+      URL.revokeObjectURL(filePreviewState.fileUrl)
+    }
+    setFilePreviewState({
+      fileName: '',
+      fileUrl: '',
+      fileKind: 'image',
+    })
   }
 
   const runOpenTextEditor = async (targetPath: string) => {
@@ -554,7 +639,7 @@ const FapSmbExternalExplorePanel = observer(() => {
           upload
         </button>
       </div>
-      <div className="list-wrap">
+      <div className="list-wrap explorer-table-wrap">
         <FolderView
           columns={FOLDER_COLUMNS}
           columnsOrder={FOLDER_COLUMNS_ORDER}
@@ -592,6 +677,12 @@ const FapSmbExternalExplorePanel = observer(() => {
                 name: 'Download',
                 data: { action: 'download' },
                 disabled: !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId),
+              },
+              {
+                type: 'item',
+                name: 'Preview',
+                data: { action: 'preview' },
+                disabled: !isPreviewableExploreItem(getExploreItemByRowId(contextMenuState.rowId)) || Boolean(exploreState?.renamingRowId),
               },
               {
                 type: 'item',
@@ -650,6 +741,9 @@ const FapSmbExternalExplorePanel = observer(() => {
             if (menuItem?.data?.action === 'download' && !exploreItem.isDirectory) {
               runDownload(buildNextPath(exploreState?.path || '/', exploreItem.name))
             }
+            if (menuItem?.data?.action === 'preview' && !exploreItem.isDirectory) {
+              runPreviewFile(exploreItem)
+            }
             if (menuItem?.data?.action === 'open-text' && !exploreItem.isDirectory) {
               requestOpenTextEditorWithCheck(exploreItem)
             }
@@ -705,6 +799,29 @@ const FapSmbExternalExplorePanel = observer(() => {
               >
                 close
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {filePreviewState.fileUrl ? (
+        <div className="file-preview-overlay">
+          <div className={`file-preview-popup ${filePreviewState.fileKind === 'pdf' ? 'is-pdf' : 'is-image'}`}>
+            <div className="file-preview-top-row">
+              <div className="file-preview-title">{filePreviewState.fileName}</div>
+              <button
+                type="button"
+                className="main-btn"
+                onClick={closeFilePreview}
+              >
+                close
+              </button>
+            </div>
+            <div className="file-preview-body">
+              {filePreviewState.fileKind === 'pdf' ? (
+                <iframe className="file-preview-pdf" src={filePreviewState.fileUrl} title={filePreviewState.fileName} />
+              ) : (
+                <img className="file-preview-img" src={filePreviewState.fileUrl} alt={filePreviewState.fileName} />
+              )}
             </div>
           </div>
         </div>

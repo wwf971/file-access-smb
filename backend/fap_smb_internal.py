@@ -15,7 +15,7 @@ from psycopg import sql
 from psycopg.rows import dict_row
 
 from db import create_file_access_point_id, get_dir_base, run_in_transaction
-from fap_smb_external import _find_file_access_point_by_id, _find_file_access_point_by_name, load_project_config
+from fap_smb_external import _find_file_access_point_by_id, _find_file_access_point_by_name, load_project_config, load_yaml_config_file
 from login import has_request_permission
 from smb_service import normalize_path, smb_connection_manager, split_parent_and_name
 
@@ -301,8 +301,7 @@ def _has_local_internal_fap_config():
     config_path = get_dir_base() / "config" / "config.0.yaml"
     if not config_path.is_file():
         return False
-    with config_path.open("r", encoding="utf-8") as file_obj:
-        data = yaml.safe_load(file_obj) or {}
+    data = load_yaml_config_file(config_path)
     if not isinstance(data, dict):
         return False
     internal_config = data.get("file_access_point_smb_internal")

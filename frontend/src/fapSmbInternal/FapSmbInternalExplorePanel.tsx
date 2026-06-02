@@ -6,7 +6,7 @@ import { fapSmbInternalStore, getFapSmbInternalSourceLabel, type FapSmbInternalF
 const FOLDER_COLUMNS = {
   name: { data: 'name', align: 'left' },
   type: { data: 'type', align: 'left' },
-  fileId: { data: 'fileId', align: 'left' },
+  id: { data: 'fileId', align: 'left' },
   size: { data: 'size', align: 'left' },
   created: { data: 'created', align: 'left' },
 }
@@ -27,6 +27,19 @@ const isImageFile = (fileItem: FapSmbInternalFileItem | null) => {
   const fileType = String(fileItem.fileType || '').toLowerCase()
   const fileName = String(fileItem.fileName || '').toLowerCase()
   return fileType.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(fileName)
+}
+
+const isPdfFile = (fileItem: FapSmbInternalFileItem | null) => {
+  if (!fileItem) {
+    return false
+  }
+  const fileType = String(fileItem.fileType || '').toLowerCase()
+  const fileName = String(fileItem.fileName || '').toLowerCase()
+  return fileType === 'application/pdf' || fileName.endsWith('.pdf')
+}
+
+const isPreviewableFile = (fileItem: FapSmbInternalFileItem | null) => {
+  return isImageFile(fileItem) || isPdfFile(fileItem)
 }
 
 const padDatePart = (value: number, length = 2) => String(value).padStart(length, '0')
@@ -54,18 +67,26 @@ const parseBackendDate = (dateText: string) => {
   ) - offsetMs)
 }
 
-const formatBackendDateWithTimeZone = (dateText: string, timeZoneHour: number) => {
+const formatTimeZoneOffset = (timeZoneMinute: number) => {
+  const normalizedTimeZoneMinute = Number(timeZoneMinute || 0)
+  const signText = normalizedTimeZoneMinute >= 0 ? '+' : '-'
+  const absMinute = Math.abs(normalizedTimeZoneMinute)
+  const hourPart = Math.floor(absMinute / 60)
+  const minutePart = absMinute % 60
+  return `UTC${signText}${padDatePart(hourPart)}${padDatePart(minutePart)}`
+}
+
+const formatBackendDateWithTimeZone = (dateText: string, timeZoneMinute: number) => {
   const dateValue = parseBackendDate(dateText)
   if (!dateValue) {
     return dateText || '-'
   }
-  const normalizedTimeZoneHour = Number(timeZoneHour || 0)
-  const shiftedDate = new Date(dateValue.getTime() + normalizedTimeZoneHour * 60 * 60 * 1000)
-  const signText = normalizedTimeZoneHour >= 0 ? '+' : '-'
+  const normalizedTimeZoneMinute = Number(timeZoneMinute || 0)
+  const shiftedDate = new Date(dateValue.getTime() + normalizedTimeZoneMinute * 60 * 1000)
   return [
     `${shiftedDate.getUTCFullYear()}-${padDatePart(shiftedDate.getUTCMonth() + 1)}-${padDatePart(shiftedDate.getUTCDate())}`,
     `${padDatePart(shiftedDate.getUTCHours())}:${padDatePart(shiftedDate.getUTCMinutes())}:${padDatePart(shiftedDate.getUTCSeconds())}`,
-    `UTC${signText}${padDatePart(Math.abs(normalizedTimeZoneHour))}`,
+    formatTimeZoneOffset(normalizedTimeZoneMinute),
   ].join(' ')
 }
 
@@ -181,12 +202,14 @@ const FapSmbInternalExplorePanel = observer(() => {
     position: null,
     rowId: null,
   })
-  const [imagePreviewState, setImagePreviewState] = useState<{
+  const [filePreviewState, setFilePreviewState] = useState<{
     fileName: string
-    imageUrl: string
+    fileUrl: string
+    fileKind: 'image' | 'pdf'
   }>({
     fileName: '',
-    imageUrl: '',
+    fileUrl: '',
+    fileKind: 'image',
   })
 
   useEffect(() => {
@@ -197,11 +220,11 @@ const FapSmbInternalExplorePanel = observer(() => {
 
   useEffect(() => {
     return () => {
-      if (imagePreviewState.imageUrl) {
-        URL.revokeObjectURL(imagePreviewState.imageUrl)
+      if (filePreviewState.fileUrl) {
+        URL.revokeObjectURL(filePreviewState.fileUrl)
       }
     }
-  }, [imagePreviewState.imageUrl])
+  }, [filePreviewState.fileUrl])
 
   if (!item) {
     return <div className="panel-title">No FAP SMB internal selected</div>
@@ -280,13 +303,13 @@ const FapSmbInternalExplorePanel = observer(() => {
     })
   }
 
-  const runPreviewImage = async (fileItem: FapSmbInternalFileItem | null) => {
-    if (!fileItem || !isImageFile(fileItem)) {
-      setMessageState({ status: 'error', messageText: 'selected file is not an image' })
+  const runPreviewFile = async (fileItem: FapSmbInternalFileItem | null) => {
+    if (!fileItem || !isPreviewableFile(fileItem)) {
+      setMessageState({ status: 'error', messageText: 'selected file is not previewable' })
       return
     }
-    if (imagePreviewState.imageUrl) {
-      URL.revokeObjectURL(imagePreviewState.imageUrl)
+    if (filePreviewState.fileUrl) {
+      URL.revokeObjectURL(filePreviewState.fileUrl)
     }
     setMessageState({ status: 'loading', messageText: `loading preview ${fileItem.fileName}` })
     const result = await fapSmbInternalStore.requestFileBlob(fileItem)
@@ -294,21 +317,25 @@ const FapSmbInternalExplorePanel = observer(() => {
       setMessageState({ status: 'error', messageText: result.messageText })
       return
     }
-    const imageUrl = URL.createObjectURL(result.blob)
-    setImagePreviewState({
+    const fileKind = isPdfFile(fileItem) ? 'pdf' : 'image'
+    const previewBlob = fileKind === 'pdf' ? new Blob([result.blob], { type: 'application/pdf' }) : result.blob
+    const fileUrl = URL.createObjectURL(previewBlob)
+    setFilePreviewState({
       fileName: fileItem.fileName,
-      imageUrl,
+      fileUrl,
+      fileKind,
     })
     setMessageState({ status: 'success', messageText: `preview loaded ${fileItem.fileName}` })
   }
 
-  const closeImagePreview = () => {
-    if (imagePreviewState.imageUrl) {
-      URL.revokeObjectURL(imagePreviewState.imageUrl)
+  const closeFilePreview = () => {
+    if (filePreviewState.fileUrl) {
+      URL.revokeObjectURL(filePreviewState.fileUrl)
     }
-    setImagePreviewState({
+    setFilePreviewState({
       fileName: '',
-      imageUrl: '',
+      fileUrl: '',
+      fileKind: 'image',
     })
   }
 
@@ -412,10 +439,10 @@ const FapSmbInternalExplorePanel = observer(() => {
         <button
           type="button"
           className="main-btn"
-          disabled={!isImageFile(fapSmbInternalStore.selectedFileItem)}
-          onClick={() => runPreviewImage(fapSmbInternalStore.selectedFileItem)}
+          disabled={!isPreviewableFile(fapSmbInternalStore.selectedFileItem)}
+          onClick={() => runPreviewFile(fapSmbInternalStore.selectedFileItem)}
         >
-          preview image
+          preview
         </button>
       </div>
       <div className="kv-wrap">
@@ -423,7 +450,7 @@ const FapSmbInternalExplorePanel = observer(() => {
         , total {fapSmbInternalStore.selectedTotalCount}
         , selected {fapSmbInternalStore.selectedFileItemList.length}
       </div>
-      <div className="list-wrap">
+      <div className="list-wrap explorer-table-wrap">
         <FolderView
           columns={FOLDER_COLUMNS}
           columnsOrder={FOLDER_COLUMNS_ORDER}
@@ -439,8 +466,8 @@ const FapSmbInternalExplorePanel = observer(() => {
           }}
           onRowDoubleClick={(rowId: string) => {
             const fileItem = getFileItemById(String(rowId || ''))
-            if (isImageFile(fileItem)) {
-              runPreviewImage(fileItem)
+            if (isPreviewableFile(fileItem)) {
+              runPreviewFile(fileItem)
               return
             }
             runDownloadOne(fileItem)
@@ -470,9 +497,9 @@ const FapSmbInternalExplorePanel = observer(() => {
               },
               {
                 type: 'item',
-                name: 'Preview Image',
-                data: { action: 'preview-image' },
-                disabled: !isImageFile(getFileItemById(contextMenuState.rowId)) || Boolean(renamingFileId),
+                name: 'Preview',
+                data: { action: 'preview' },
+                disabled: !isPreviewableFile(getFileItemById(contextMenuState.rowId)) || Boolean(renamingFileId),
               },
               {
                 type: 'item',
@@ -503,8 +530,8 @@ const FapSmbInternalExplorePanel = observer(() => {
             if (menuItem?.data?.action === 'download-one') {
               runDownloadOne(fileItem)
             }
-            if (menuItem?.data?.action === 'preview-image') {
-              runPreviewImage(fileItem)
+            if (menuItem?.data?.action === 'preview') {
+              runPreviewFile(fileItem)
             }
             if (menuItem?.data?.action === 'rename' && fileItem && canWrite) {
               fapSmbInternalStore.setSelectedFileId(item.fileAccessPointId, fileItem.fileId)
@@ -514,21 +541,25 @@ const FapSmbInternalExplorePanel = observer(() => {
           }}
         />
       ) : null}
-      {imagePreviewState.imageUrl ? (
-        <div className="image-preview-overlay">
-          <div className="image-preview-popup">
-            <div className="image-preview-top-row">
-              <div className="image-preview-title">{imagePreviewState.fileName}</div>
+      {filePreviewState.fileUrl ? (
+        <div className="file-preview-overlay">
+          <div className={`file-preview-popup ${filePreviewState.fileKind === 'pdf' ? 'is-pdf' : 'is-image'}`}>
+            <div className="file-preview-top-row">
+              <div className="file-preview-title">{filePreviewState.fileName}</div>
               <button
                 type="button"
                 className="main-btn"
-                onClick={closeImagePreview}
+                onClick={closeFilePreview}
               >
                 close
               </button>
             </div>
-            <div className="image-preview-body">
-              <img className="image-preview-img" src={imagePreviewState.imageUrl} alt={imagePreviewState.fileName} />
+            <div className="file-preview-body">
+              {filePreviewState.fileKind === 'pdf' ? (
+                <iframe className="file-preview-pdf" src={filePreviewState.fileUrl} title={filePreviewState.fileName} />
+              ) : (
+                <img className="file-preview-img" src={filePreviewState.fileUrl} alt={filePreviewState.fileName} />
+              )}
             </div>
           </div>
         </div>

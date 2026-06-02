@@ -18,7 +18,7 @@ _CONFIG_DIR = _DIR_BASE / "config"
 if str(_CONFIG_DIR) not in sys.path:
     sys.path.insert(0, str(_CONFIG_DIR))
 
-from config_loader import load_project_config
+from config_loader import load_project_config, load_yaml_config_file
 from db import delete_db_file_access_point, get_dir_base, list_db_file_access_points, upsert_db_file_access_point
 from login import get_request_permission, get_request_zip_encryption_key, get_request_zip_timeout_seconds, has_request_permission
 from smb_service import smb_connection_manager

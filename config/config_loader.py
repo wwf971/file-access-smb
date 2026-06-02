@@ -6,6 +6,29 @@ from typing import Any
 import yaml
 
 
+class UniqueKeyLoader(yaml.SafeLoader):
+    pass
+
+
+def _construct_mapping_without_duplicate_keys(loader: UniqueKeyLoader, node, deep=False):
+    mapping = {}
+    for key_node, value_node in node.value:
+        key = loader.construct_object(key_node, deep=deep)
+        if key in mapping:
+            line_number = key_node.start_mark.line + 1
+            column_number = key_node.start_mark.column + 1
+            raise ValueError(f"duplicate config key '{key}' at {loader.name}:{line_number}:{column_number}")
+        value = loader.construct_object(value_node, deep=deep)
+        mapping[key] = value
+    return mapping
+
+
+UniqueKeyLoader.add_constructor(
+    yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+    _construct_mapping_without_duplicate_keys,
+)
+
+
 def _deep_merge(base_value: Any, override_value: Any):
     if isinstance(base_value, dict) and isinstance(override_value, dict):
         merged = dict(base_value)
@@ -15,11 +38,16 @@ def _deep_merge(base_value: Any, override_value: Any):
     return override_value if override_value is not None else base_value
 
 
-def _safe_load_yaml_file(file_path: Path):
+def load_yaml_config_file(file_path: Path):
     if not file_path.is_file():
         return {}
     with file_path.open("r", encoding="utf-8") as file:
-        data = yaml.safe_load(file) or {}
+        loader = UniqueKeyLoader(file)
+        loader.name = str(file_path)
+        try:
+            data = loader.get_single_data() or {}
+        finally:
+            loader.dispose()
     if not isinstance(data, dict):
         return {}
     return data
@@ -27,8 +55,8 @@ def _safe_load_yaml_file(file_path: Path):
 
 def load_project_config(dir_base: Path):
     config_dir = dir_base / "config"
-    default_config = _safe_load_yaml_file(config_dir / "config.yaml")
-    local_config = _safe_load_yaml_file(config_dir / "config.0.yaml")
+    default_config = load_yaml_config_file(config_dir / "config.yaml")
+    local_config = load_yaml_config_file(config_dir / "config.0.yaml")
     merged = _deep_merge(default_config, local_config)
     local_file_access_point_smb_external = (
         local_config.get("file_access_point_smb_external")

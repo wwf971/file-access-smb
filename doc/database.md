@@ -39,6 +39,7 @@ Per SMB internal file table:
   - `deletedAt` timestamptz
 
 `files_{fapId}` is created when an SMB internal file access point is created or first used. The table name uses the internal file access point id and only allows lowercase letters, digits, and underscore.
+`createAtTimeZone` and `updateAtTimeZone` store UTC offset in minutes. For example, Japan time is `540` and is displayed as `UTC+0900`.
 Deleting a database-backed SMB internal file access point drops this table but does not remove SMB files.
 
 SMB internal storage layout:
@@ -59,7 +60,7 @@ SMB internal storage layout:
 
 Name matching is case-sensitive. The timestamp uses the project format, for example `20260520_23250530+09`.
 
-When migrating old `local/internal` file docs, `createdAt` is populated from old `createAt`, `updatedAt` is populated from old `updateAt`, and second, millisecond, microsecond, or nanosecond epoch values are normalized only if they fall in 2020-2030. `createAtTimeZone` and `updateAtTimeZone` preserve the old integer-hour timezone fields.
+When migrating old `local/internal` file docs, `createdAt` is populated from old `createAt`, `updatedAt` is populated from old `updateAt`, and second, millisecond, microsecond, or nanosecond epoch values are normalized only if they fall in 2020-2030. `createAtTimeZone` and `updateAtTimeZone` are normalized to minute offsets; hour-based values such as `9` become `540`, while minute-based values such as `540` stay unchanged.
 
 Expected failure cases:
 

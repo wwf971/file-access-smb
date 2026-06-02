@@ -780,6 +780,22 @@ export class FapSmbExternalStore {
   }
 
   async requestDownloadExploreFile(fileAccessPointId: string, targetPath: string) {
+    const result = await this.requestExploreFileBlob(fileAccessPointId, targetPath)
+    if (!result.isSuccess || !result.blob) {
+      return { isSuccess: false, messageText: result.messageText }
+    }
+    const downloadUrl = URL.createObjectURL(result.blob)
+    const anchor = document.createElement('a')
+    anchor.href = downloadUrl
+    anchor.download = getPathName(targetPath) || 'download.bin'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(downloadUrl)
+    return { isSuccess: true, messageText: `Downloaded: ${targetPath}` }
+  }
+
+  async requestExploreFileBlob(fileAccessPointId: string, targetPath: string): Promise<{ isSuccess: boolean, messageText: string, blob?: Blob }> {
     const response = await requestAuthenticatedBlob('/file-access-point/explore/download', {
       method: 'POST',
       headers: {
@@ -791,15 +807,7 @@ export class FapSmbExternalStore {
       }),
     })
     const blob = await response.blob()
-    const downloadUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = downloadUrl
-    anchor.download = getPathName(targetPath) || 'download.bin'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(downloadUrl)
-    return { isSuccess: true, messageText: `Downloaded: ${targetPath}` }
+    return { isSuccess: true, messageText: 'loaded', blob }
   }
 
   async requestOpenTextEditor(fileAccessPointId: string, targetPath: string) {
