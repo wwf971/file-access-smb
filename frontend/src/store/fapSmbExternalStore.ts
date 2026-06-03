@@ -34,6 +34,7 @@ type ExploreItem = {
 type ExploreState = {
   path: string
   items: ExploreItem[]
+  selectedRowIds: string[]
   isExploring: boolean
   editingRowId: string | null
   editingName: string
@@ -110,6 +111,7 @@ export class FapSmbExternalStore {
   isDeleting = false
   isChecking = false
   isZipRunning = false
+  isCreatingNewFile = false
   errorText = ''
   items: FapSmbExternalItem[] = []
   selectedId = ''
@@ -177,6 +179,7 @@ export class FapSmbExternalStore {
     return {
       path: '/',
       items: [],
+      selectedRowIds: [],
       isExploring: false,
       editingRowId: null,
       editingName: '',
@@ -198,6 +201,11 @@ export class FapSmbExternalStore {
   setExplorePath(fileAccessPointId: string, path: string) {
     const state = this.getExploreState(fileAccessPointId)
     state.path = String(path || '/')
+  }
+
+  setExploreSelectedRowIds(fileAccessPointId: string, rowIds: string[]) {
+    const state = this.getExploreState(fileAccessPointId)
+    state.selectedRowIds = rowIds
   }
 
   setExploreEditingRow(fileAccessPointId: string, rowId: string | null, editingName = '') {
@@ -229,6 +237,14 @@ export class FapSmbExternalStore {
     sortExploreItems(state.items)
   }
 
+  addAndSelectExploreFileItemIfCurrent(fileAccessPointId: string, folderPath: string, name: string, sizeBytes: number) {
+    this.addExploreFileItemIfCurrent(fileAccessPointId, folderPath, name, sizeBytes)
+    const state = this.getExploreState(fileAccessPointId)
+    if (state.path === folderPath && name) {
+      state.selectedRowIds = [`f:${name}`]
+    }
+  }
+
   removeExploreFileItemsIfCurrent(fileAccessPointId: string, folderPath: string, nameList: string[]) {
     const state = this.getExploreState(fileAccessPointId)
     if (state.path !== folderPath || nameList.length === 0) {
@@ -236,6 +252,7 @@ export class FapSmbExternalStore {
     }
     const nameSet = new Set(nameList)
     state.items = state.items.filter((item) => item.isDirectory || !nameSet.has(item.name))
+    state.selectedRowIds = state.selectedRowIds.filter((rowId) => !nameSet.has(rowId.slice(2)))
   }
 
   openUploadPopup(fileAccessPointId: string, folderPath: string) {
@@ -715,6 +732,7 @@ export class FapSmbExternalStore {
         const exploreState = this.getExploreState(fileAccessPointId)
         exploreState.items = items
         const existingRowIdSet = new Set(items.map((exploreItem) => `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`))
+        exploreState.selectedRowIds = exploreState.selectedRowIds.filter((rowId) => existingRowIdSet.has(rowId))
         if (exploreState.editingRowId && !existingRowIdSet.has(exploreState.editingRowId)) {
           exploreState.editingRowId = null
           exploreState.editingName = ''
@@ -775,6 +793,52 @@ export class FapSmbExternalStore {
     } finally {
       runInAction(() => {
         state.renamingRowId = null
+      })
+    }
+  }
+
+  async requestCreateEmptyExploreFile(fileAccessPointId: string, folderPath: string, suffix: string): Promise<{ isSuccess: boolean, messageText: string, rowId: string }> {
+    if (!this.canWrite) {
+      return { isSuccess: false, messageText: 'write permission required', rowId: '' }
+    }
+    if (this.isCreatingNewFile) {
+      return { isSuccess: false, messageText: 'new file creation is in progress', rowId: '' }
+    }
+    const normalizedSuffix = String(suffix || '').trim()
+    if (!normalizedSuffix) {
+      return { isSuccess: false, messageText: 'suffix is required', rowId: '' }
+    }
+    runInAction(() => {
+      this.isCreatingNewFile = true
+      this.errorText = ''
+    })
+    try {
+      const data = await requestAuthenticatedJson('/file-access-point/explore/new-file', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileAccessPointId,
+          path: folderPath,
+          suffix: normalizedSuffix,
+        }),
+      })
+      const name = String(data.name || '')
+      const sizeBytes = Number(data.sizeBytes || 0)
+      runInAction(() => {
+        this.addAndSelectExploreFileItemIfCurrent(fileAccessPointId, folderPath, name, sizeBytes)
+      })
+      return {
+        isSuccess: true,
+        messageText: `created ${name || 'new file'}`,
+        rowId: name ? `f:${name}` : '',
+      }
+    } catch (error: unknown) {
+      runInAction(() => {
+        this.errorText = String(error)
+      })
+      return { isSuccess: false, messageText: String(error), rowId: '' }
+    } finally {
+      runInAction(() => {
+        this.isCreatingNewFile = false
       })
     }
   }

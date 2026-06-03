@@ -259,6 +259,7 @@ const FapSmbExternalExplorePanel = observer(() => {
   const item = fapSmbExternalStore.selectedItem
   const exploreState = item ? fapSmbExternalStore.getExploreState(item.fileAccessPointId) : null
   const canWrite = fapSmbExternalStore.canWrite
+  const explorerWrapRef = React.useRef<HTMLDivElement | null>(null)
   const [messageState, setMessageState] = useState({
     status: 'idle',
     messageText: '',
@@ -279,6 +280,13 @@ const FapSmbExternalExplorePanel = observer(() => {
     messageText: '',
     targetPath: '',
   })
+  const [customNewFileState, setCustomNewFileState] = useState<{
+    isOpen: boolean
+    suffix: string
+  }>({
+    isOpen: false,
+    suffix: '',
+  })
   const [filePreviewState, setFilePreviewState] = useState<{
     fileName: string
     fileUrl: string
@@ -288,6 +296,7 @@ const FapSmbExternalExplorePanel = observer(() => {
     fileUrl: '',
     fileKind: 'image',
   })
+  const [pendingScrollRowId, setPendingScrollRowId] = useState('')
 
   useEffect(() => {
     return () => {
@@ -296,6 +305,24 @@ const FapSmbExternalExplorePanel = observer(() => {
       }
     }
   }, [filePreviewState.fileUrl])
+
+  useEffect(() => {
+    if (!pendingScrollRowId || !explorerWrapRef.current) {
+      return
+    }
+    const frameId = requestAnimationFrame(() => {
+      const rowElement = Array.from(explorerWrapRef.current?.querySelectorAll<HTMLElement>('[data-row-id]') || [])
+        .find((element) => element.getAttribute('data-row-id') === pendingScrollRowId)
+      rowElement?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+      })
+      setPendingScrollRowId('')
+    })
+    return () => {
+      cancelAnimationFrame(frameId)
+    }
+  }, [pendingScrollRowId, exploreState?.items.length])
 
   const runExplore = async (path: string) => {
     setMessageState({
@@ -401,6 +428,28 @@ const FapSmbExternalExplorePanel = observer(() => {
     })
   }
 
+  const runCreateEmptyFile = async (suffix: string) => {
+    if (!item || !exploreState) {
+      return
+    }
+    setMessageState({
+      status: 'loading',
+      messageText: `Creating new file: ${suffix}`,
+    })
+    const result = await fapSmbExternalStore.requestCreateEmptyExploreFile(
+      item.fileAccessPointId,
+      exploreState.path || '/',
+      suffix,
+    )
+    setMessageState({
+      status: result?.isSuccess ? 'success' : 'error',
+      messageText: result?.messageText || '',
+    })
+    if (result?.isSuccess && result.rowId) {
+      setPendingScrollRowId(result.rowId)
+    }
+  }
+
   const runOpenTextEditor = async (targetPath: string) => {
     if (!item) {
       return
@@ -463,9 +512,13 @@ const FapSmbExternalExplorePanel = observer(() => {
     })
   }
 
-  const openContextMenu = (event: MouseEvent, rowId: string) => {
+  const openContextMenu = (event: MouseEvent | React.MouseEvent, rowId: string) => {
     event.preventDefault()
     event.stopPropagation()
+    const normalizedRowId = String(rowId || '')
+    if (item && normalizedRowId && !exploreState?.selectedRowIds.includes(normalizedRowId)) {
+      fapSmbExternalStore.setExploreSelectedRowIds(item.fileAccessPointId, [normalizedRowId])
+    }
     setContextMenuState({
       position: null,
       rowId: null,
@@ -473,7 +526,7 @@ const FapSmbExternalExplorePanel = observer(() => {
     requestAnimationFrame(() => {
       setContextMenuState({
         position: { x: event.clientX, y: event.clientY },
-        rowId: String(rowId || ''),
+        rowId: normalizedRowId,
       })
     })
   }
@@ -565,6 +618,7 @@ const FapSmbExternalExplorePanel = observer(() => {
       ? 'explore-row-renaming'
       : '',
   }))
+  const isNewFileDisabled = !canWrite || Boolean(exploreState?.renamingRowId) || Boolean(exploreState?.isExploring) || fapSmbExternalStore.isCreatingNewFile
 
   return (
     <div className="panel-root">
@@ -639,7 +693,17 @@ const FapSmbExternalExplorePanel = observer(() => {
           upload
         </button>
       </div>
-      <div className="list-wrap explorer-table-wrap">
+      <div
+        ref={explorerWrapRef}
+        className="list-wrap explorer-table-wrap"
+        onContextMenu={(event) => {
+          const rowElement = (event.target as HTMLElement | null)?.closest?.('[data-row-id]')
+          if (rowElement) {
+            return
+          }
+          openContextMenu(event, '')
+        }}
+      >
         <FolderView
           columns={FOLDER_COLUMNS}
           columnsOrder={FOLDER_COLUMNS_ORDER}
@@ -648,7 +712,11 @@ const FapSmbExternalExplorePanel = observer(() => {
           bodyHeight={320}
           showStatusBar={false}
           listOnly={true}
-          selectedRowId={null}
+          selectionMode="multiple"
+          selectedRowIds={exploreState?.selectedRowIds || []}
+          onSelectedRowIdsChange={(rowIds: string[]) => {
+            fapSmbExternalStore.setExploreSelectedRowIds(item.fileAccessPointId, rowIds)
+          }}
           onRowDoubleClick={(rowId: string) => {
             if (exploreState?.renamingRowId) {
               return
@@ -691,6 +759,31 @@ const FapSmbExternalExplorePanel = observer(() => {
                 disabled: !canWrite || !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId) || fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving,
               },
               {
+                type: 'menu',
+                name: 'New',
+                disabled: isNewFileDisabled,
+                children: [
+                  {
+                    type: 'item',
+                    name: '.txt',
+                    data: { action: 'new-file', suffix: '.txt' },
+                    disabled: isNewFileDisabled,
+                  },
+                  {
+                    type: 'item',
+                    name: '.md',
+                    data: { action: 'new-file', suffix: '.md' },
+                    disabled: isNewFileDisabled,
+                  },
+                  {
+                    type: 'item',
+                    name: 'custom',
+                    data: { action: 'new-file-custom' },
+                    disabled: isNewFileDisabled,
+                  },
+                ],
+              },
+              {
                 type: 'item',
                 name: 'Download Zip',
                 data: { action: 'download-zip' },
@@ -730,8 +823,27 @@ const FapSmbExternalExplorePanel = observer(() => {
               return
             }
             const menuItem = eventData?.item
+            if (menuItem?.data?.action === 'new-file') {
+              runCreateEmptyFile(String(menuItem?.data?.suffix || ''))
+              closeContextMenu()
+              return
+            }
+            if (menuItem?.data?.action === 'new-file-custom') {
+              setCustomNewFileState({
+                isOpen: true,
+                suffix: '',
+              })
+              closeContextMenu()
+              return
+            }
+            if (menuItem?.data?.action === 'clean-bak' && canWrite) {
+              runCleanBackupFiles()
+              closeContextMenu()
+              return
+            }
             const exploreItem = getExploreItemByRowId(contextMenuState.rowId)
             if (!exploreItem) {
+              closeContextMenu()
               return
             }
             if (menuItem?.data?.action === 'open' && exploreItem.isDirectory) {
@@ -753,9 +865,6 @@ const FapSmbExternalExplorePanel = observer(() => {
             if (menuItem?.data?.action === 'rename' && item && canWrite) {
               const rowId = contextMenuState.rowId || ''
               fapSmbExternalStore.setExploreEditingRow(item.fileAccessPointId, rowId, exploreItem.name)
-            }
-            if (menuItem?.data?.action === 'clean-bak' && canWrite) {
-              runCleanBackupFiles()
             }
             closeContextMenu()
           }}
@@ -794,6 +903,77 @@ const FapSmbExternalExplorePanel = observer(() => {
                     status: 'idle',
                     messageText: '',
                     targetPath: '',
+                  })
+                }}
+              >
+                close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {customNewFileState.isOpen ? (
+        <div className="new-file-overlay">
+          <div className="new-file-popup">
+            <div className="new-file-title">New custom file</div>
+            <div className="new-file-row">
+              <div className="new-file-label">suffix</div>
+              <input
+                className="text-input new-file-input"
+                value={customNewFileState.suffix}
+                autoFocus={true}
+                onChange={(event) => {
+                  setCustomNewFileState({
+                    isOpen: true,
+                    suffix: event.target.value,
+                  })
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    const suffix = customNewFileState.suffix
+                    if (!suffix.trim() || fapSmbExternalStore.isCreatingNewFile) {
+                      return
+                    }
+                    setCustomNewFileState({
+                      isOpen: false,
+                      suffix: '',
+                    })
+                    runCreateEmptyFile(suffix)
+                    return
+                  }
+                  if (event.key === 'Escape') {
+                    setCustomNewFileState({
+                      isOpen: false,
+                      suffix: '',
+                    })
+                  }
+                }}
+              />
+            </div>
+            <div className="new-file-help">Examples: txt, .txt, .custom</div>
+            <div className="new-file-actions">
+              <button
+                type="button"
+                className="main-btn"
+                disabled={!customNewFileState.suffix.trim() || fapSmbExternalStore.isCreatingNewFile}
+                onClick={() => {
+                  const suffix = customNewFileState.suffix
+                  setCustomNewFileState({
+                    isOpen: false,
+                    suffix: '',
+                  })
+                  runCreateEmptyFile(suffix)
+                }}
+              >
+                create
+              </button>
+              <button
+                type="button"
+                className="main-btn"
+                onClick={() => {
+                  setCustomNewFileState({
+                    isOpen: false,
+                    suffix: '',
                   })
                 }}
               >

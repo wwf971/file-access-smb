@@ -62,6 +62,19 @@ def _join_path(base_path: str, name: str):
     return f"{normalized_base}/{normalized_name}"
 
 
+def _normalize_new_file_suffix(suffix_value: Any):
+    suffix = _to_text(suffix_value)
+    if not suffix:
+        raise RuntimeError("suffix is required")
+    if "/" in suffix or "\\" in suffix:
+        raise RuntimeError("suffix cannot include path separator")
+    if not suffix.startswith("."):
+        suffix = f".{suffix}"
+    if suffix == ".":
+        raise RuntimeError("suffix cannot be only dot")
+    return suffix
+
+
 def _build_zip_archive(
     task,
     file_access_point_id: str,
@@ -492,6 +505,44 @@ def register_fap_smb_external_routes(app, sock, make_json_response, validate_aut
                     "fileAccessPointId": file_access_point_id,
                     "folderPath": target_path,
                     **upload_result,
+                },
+            )
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 500
+
+    @app.post("/file-access-point/explore/new-file")
+    def file_access_point_explore_new_file():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        file_access_point_id = _to_text(body.get("fileAccessPointId"))
+        target_path = _normalize_path(body.get("path"))
+        try:
+            suffix = _normalize_new_file_suffix(body.get("suffix"))
+        except RuntimeError as error:
+            return make_json_response(-1, message=str(error)), 400
+        current_item = _find_file_access_point_by_id(file_access_point_id)
+        if current_item is None:
+            return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
+        if not current_item["isMetadataValid"]:
+            return make_json_response(
+                -1,
+                message=f"metadata invalid: {' | '.join(current_item['validationErrorTextList'])}",
+            ), 400
+        try:
+            create_result = smb_connection_manager.write_new_file_bytes(
+                file_access_point_id,
+                current_item["metadata"],
+                target_path,
+                f"new{suffix}",
+                b"",
+            )
+            return make_json_response(
+                0,
+                data={
+                    "fileAccessPointId": file_access_point_id,
+                    "folderPath": target_path,
+                    **create_result,
                 },
             )
         except Exception as error:
