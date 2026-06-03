@@ -31,10 +31,16 @@ type ExploreItem = {
   sizeBytes: number
 }
 
+export type ExploreMessageState = {
+  status: 'idle' | 'loading' | 'success' | 'error' | 'warning'
+  messageText: string
+}
+
 type ExploreState = {
   path: string
   items: ExploreItem[]
-  selectedRowIds: string[]
+  rowsSelectedId: string[]
+  messageState: ExploreMessageState
   isExploring: boolean
   editingRowId: string | null
   editingName: string
@@ -60,7 +66,7 @@ export type UploadTaskState = {
   fileAccessPointId: string
   folderPath: string
   items: UploadFileItem[]
-  selectedRowIds: string[]
+  rowsSelectedId: string[]
   isUploading: boolean
   messageText: string
   errorText: string
@@ -175,11 +181,15 @@ export class FapSmbExternalStore {
     return this.currentUploadTask !== null
   }
 
-  createExploreState() {
+  createExploreState(): ExploreState {
     return {
       path: '/',
       items: [],
-      selectedRowIds: [],
+      rowsSelectedId: [],
+      messageState: {
+        status: 'idle',
+        messageText: '',
+      },
       isExploring: false,
       editingRowId: null,
       editingName: '',
@@ -205,7 +215,12 @@ export class FapSmbExternalStore {
 
   setExploreSelectedRowIds(fileAccessPointId: string, rowIds: string[]) {
     const state = this.getExploreState(fileAccessPointId)
-    state.selectedRowIds = rowIds
+    state.rowsSelectedId = rowIds
+  }
+
+  setExploreMessageState(fileAccessPointId: string, messageState: ExploreMessageState) {
+    const state = this.getExploreState(fileAccessPointId)
+    state.messageState = messageState
   }
 
   setExploreEditingRow(fileAccessPointId: string, rowId: string | null, editingName = '') {
@@ -241,7 +256,7 @@ export class FapSmbExternalStore {
     this.addExploreFileItemIfCurrent(fileAccessPointId, folderPath, name, sizeBytes)
     const state = this.getExploreState(fileAccessPointId)
     if (state.path === folderPath && name) {
-      state.selectedRowIds = [`f:${name}`]
+      state.rowsSelectedId = [`f:${name}`]
     }
   }
 
@@ -252,7 +267,7 @@ export class FapSmbExternalStore {
     }
     const nameSet = new Set(nameList)
     state.items = state.items.filter((item) => item.isDirectory || !nameSet.has(item.name))
-    state.selectedRowIds = state.selectedRowIds.filter((rowId) => !nameSet.has(rowId.slice(2)))
+    state.rowsSelectedId = state.rowsSelectedId.filter((rowId) => !nameSet.has(rowId.slice(2)))
   }
 
   openUploadPopup(fileAccessPointId: string, folderPath: string) {
@@ -265,7 +280,7 @@ export class FapSmbExternalStore {
       fileAccessPointId,
       folderPath: String(folderPath || '/'),
       items: [],
-      selectedRowIds: [],
+      rowsSelectedId: [],
       isUploading: false,
       messageText: '',
       errorText: '',
@@ -314,7 +329,7 @@ export class FapSmbExternalStore {
     if (!task) {
       return
     }
-    task.selectedRowIds = rowIds
+    task.rowsSelectedId = rowIds
   }
 
   setUploadItemName(itemId: string, uploadName: string) {
@@ -332,12 +347,12 @@ export class FapSmbExternalStore {
 
   deleteSelectedUploadItems() {
     const task = this.currentUploadTask
-    if (!task || task.selectedRowIds.length === 0) {
+    if (!task || task.rowsSelectedId.length === 0) {
       return
     }
-    const selectedSet = new Set(task.selectedRowIds)
+    const selectedSet = new Set(task.rowsSelectedId)
     task.items = task.items.filter((item) => item.status === 'uploading' || !selectedSet.has(item.itemId))
-    task.selectedRowIds = task.selectedRowIds.filter((rowId) => task.items.some((item) => item.itemId === rowId))
+    task.rowsSelectedId = task.rowsSelectedId.filter((rowId) => task.items.some((item) => item.itemId === rowId))
     task.messageText = `${task.items.length} file item(s) ready`
   }
 
@@ -352,7 +367,7 @@ export class FapSmbExternalStore {
     if (task.isUploading) {
       return { isSuccess: false, messageText: 'upload is in progress' }
     }
-    const selectedSet = new Set(task.selectedRowIds)
+    const selectedSet = new Set(task.rowsSelectedId)
     const itemList = task.items.filter((item) => {
       if (item.status === 'success' || item.status === 'uploading') {
         return false
@@ -706,12 +721,12 @@ export class FapSmbExternalStore {
     }
   }
 
-  async requestExplore(path: string) {
-    if (!this.selectedItem) {
+  async requestExplore(fileAccessPointId: string, path: string) {
+    const normalizedFileAccessPointId = String(fileAccessPointId || '')
+    if (!normalizedFileAccessPointId) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
-    const fileAccessPointId = this.selectedItem.fileAccessPointId
-    const state = this.getExploreState(fileAccessPointId)
+    const state = this.getExploreState(normalizedFileAccessPointId)
     if (state.isExploring) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
@@ -723,16 +738,16 @@ export class FapSmbExternalStore {
       const data = await requestAuthenticatedJson('/file-access-point/explore/list', {
         method: 'POST',
         body: JSON.stringify({
-          fileAccessPointId,
+          fileAccessPointId: normalizedFileAccessPointId,
           path,
         }),
       })
       const items = Array.isArray(data.items) ? (data.items as ExploreItem[]) : []
       runInAction(() => {
-        const exploreState = this.getExploreState(fileAccessPointId)
+        const exploreState = this.getExploreState(normalizedFileAccessPointId)
         exploreState.items = items
         const existingRowIdSet = new Set(items.map((exploreItem) => `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`))
-        exploreState.selectedRowIds = exploreState.selectedRowIds.filter((rowId) => existingRowIdSet.has(rowId))
+        exploreState.rowsSelectedId = exploreState.rowsSelectedId.filter((rowId) => existingRowIdSet.has(rowId))
         if (exploreState.editingRowId && !existingRowIdSet.has(exploreState.editingRowId)) {
           exploreState.editingRowId = null
           exploreState.editingName = ''
@@ -745,12 +760,12 @@ export class FapSmbExternalStore {
     } catch (error: unknown) {
       runInAction(() => {
         this.errorText = String(error)
-        this.getExploreState(fileAccessPointId).items = []
+        this.getExploreState(normalizedFileAccessPointId).items = []
       })
       return { isSuccess: false, messageText: String(error) }
     } finally {
       runInAction(() => {
-        this.getExploreState(fileAccessPointId).isExploring = false
+        this.getExploreState(normalizedFileAccessPointId).isExploring = false
       })
     }
   }
@@ -779,7 +794,7 @@ export class FapSmbExternalStore {
           nextName: normalizedNextName,
         }),
       })
-      await this.requestExplore(state.path)
+      await this.requestExplore(fileAccessPointId, state.path)
       runInAction(() => {
         state.editingRowId = null
         state.editingName = ''
@@ -1161,7 +1176,7 @@ export class FapSmbExternalStore {
     }
   }
 
-  async requestStartZip(path: string) {
+  async requestStartZip(path: string, isDirectory = true) {
     if (this.isZipRunning || !this.selectedItem) {
       return { isSuccess: false, messageText: 'busy or no selection' }
     }
@@ -1177,6 +1192,7 @@ export class FapSmbExternalStore {
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
           path,
+          isDirectory,
         }),
       })
       const taskId = String(data.taskId || '')

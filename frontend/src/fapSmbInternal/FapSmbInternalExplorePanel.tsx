@@ -460,7 +460,7 @@ const FapSmbInternalExplorePanel = observer(() => {
           showStatusBar={false}
           listOnly={true}
           selectionMode="multiple"
-          selectedRowIds={fapSmbInternalStore.selectedFileIds}
+          rowsSelectedId={fapSmbInternalStore.selectedFileIds}
           onSelectedRowIdsChange={(rowIds: string[]) => {
             fapSmbInternalStore.setSelectedFileIds(item.fileAccessPointId, rowIds)
           }}

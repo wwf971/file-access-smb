@@ -81,10 +81,11 @@ def _build_zip_archive(
     metadata: dict[str, Any],
     target_path: str,
     zip_encryption_key: str = "",
+    target_is_directory: bool = True,
 ):
-    folder_name_raw = target_path.strip("/").split("/")[-1] or "root"
-    folder_name = sanitize_file_name(folder_name_raw)
-    zip_path = create_zip_temp_path(folder_name)
+    target_name_raw = target_path.strip("/").split("/")[-1] or "root"
+    target_name = sanitize_file_name(target_name_raw)
+    zip_path = create_zip_temp_path(target_name)
 
     def ensure_not_aborted():
         if task.abort_event.is_set():
@@ -107,6 +108,21 @@ def _build_zip_archive(
             file_bytes = smb_connection_manager.read_file_bytes(file_access_point_id, metadata, child_path)
             zip_file.writestr(child_rel, file_bytes)
 
+    def write_file(file_path: str, zip_file):
+        ensure_not_aborted()
+        file_name = file_path.strip("/").split("/")[-1]
+        if not file_name:
+            raise RuntimeError("path should point to a file")
+        task.emit_log(f"pack {file_path}")
+        file_bytes = smb_connection_manager.read_file_bytes(file_access_point_id, metadata, file_path)
+        zip_file.writestr(file_name, file_bytes)
+
+    def write_target(zip_file):
+        if target_is_directory:
+            write_folder(target_path, zip_file, target_name)
+            return
+        write_file(target_path, zip_file)
+
     if zip_encryption_key:
         with pyzipper.AESZipFile(
             zip_path,
@@ -115,13 +131,13 @@ def _build_zip_archive(
             encryption=pyzipper.WZ_AES,
         ) as zip_file:
             zip_file.setpassword(str(zip_encryption_key).encode("utf-8"))
-            write_folder(target_path, zip_file, folder_name)
+            write_target(zip_file)
     else:
         with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-            write_folder(target_path, zip_file, folder_name)
+            write_target(zip_file)
     task.emit_log(f"zip ready {zip_path}")
     with task.lock:
-        task.result_download_name = f"{folder_name}.zip"
+        task.result_download_name = f"{target_name}.zip"
     return zip_path
 
 
@@ -555,6 +571,7 @@ def register_fap_smb_external_routes(app, sock, make_json_response, validate_aut
         body = request.get_json(silent=True) or {}
         file_access_point_id = _to_text(body.get("fileAccessPointId"))
         target_path = _normalize_path(body.get("path"))
+        target_is_directory = body.get("isDirectory") is not False
         current_item = _find_file_access_point_by_id(file_access_point_id)
         if current_item is None:
             return make_json_response(-1, message=f"file access point not found: {file_access_point_id}"), 404
@@ -681,6 +698,7 @@ def register_fap_smb_external_routes(app, sock, make_json_response, validate_aut
                 current_item["metadata"],
                 target_path,
                 zip_encryption_key,
+                target_is_directory,
             ),
             timeout_seconds=zip_timeout_seconds,
         )

@@ -195,7 +195,7 @@ const FapSmbExternalUploadFile = observer(() => {
     return null
   }
 
-  const selectedSet = new Set(task.selectedRowIds)
+  const selectedSet = new Set(task.rowsSelectedId)
   const isDeleteDisabled = task.items.every((item) => !selectedSet.has(item.itemId) || item.status === 'uploading')
   const isUploadSelectedDisabled = task.isUploading || task.items.every((item) => (
     !selectedSet.has(item.itemId) || item.status === 'success' || item.status === 'uploading'
@@ -327,7 +327,7 @@ const FapSmbExternalUploadFile = observer(() => {
             showStatusBar={true}
             listOnly={true}
             selectionMode="multiple"
-            selectedRowIds={task.selectedRowIds}
+            rowsSelectedId={task.rowsSelectedId}
             onSelectedRowIdsChange={(rowIds: string[]) => {
               fapSmbExternalStore.setUploadSelectedRowIds(rowIds)
             }}

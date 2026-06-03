@@ -5,7 +5,13 @@ import {
   fapSmbExternalStore,
   TEXT_EDITOR_MAX_SIZE_BYTES,
   TEXT_EDITOR_WARN_SIZE_BYTES,
+  type ExploreMessageState,
 } from '../store/fapSmbExternalStore'
+import {
+  TEXT_EDITOR_ALLOWED_NAME_SET,
+  TEXT_EDITOR_ALLOWED_SUFFIX_SET,
+  TEXT_EDITOR_BLOCKED_SUFFIX_SET,
+} from '../config'
 
 function buildParentPath(path: string) {
   const normalized = String(path || '/')
@@ -27,68 +33,6 @@ function buildNextPath(currentPath: string, itemName: string) {
   const base = currentPath === '/' ? '' : currentPath
   return `${base}/${itemName}`
 }
-
-const TEXT_EDITOR_ALLOWED_SUFFIX_SET = new Set([
-  '.txt',
-  '.md',
-  '.markdown',
-  '.js',
-  '.jsx',
-  '.ts',
-  '.tsx',
-  '.json',
-  '.yaml',
-  '.yml',
-  '.css',
-  '.html',
-  '.xml',
-  '.csv',
-  '.log',
-  '.py',
-  '.sh',
-  '.toml',
-  '.ini',
-  '.conf',
-])
-
-const TEXT_EDITOR_ALLOWED_NAME_SET = new Set([
-  '.env',
-  '.gitignore',
-  'makefile',
-])
-
-const TEXT_EDITOR_BLOCKED_SUFFIX_SET = new Set([
-  '.pdf',
-  '.exe',
-  '.dll',
-  '.so',
-  '.dylib',
-  '.zip',
-  '.7z',
-  '.rar',
-  '.tar',
-  '.gz',
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.gif',
-  '.webp',
-  '.mp3',
-  '.mp4',
-  '.avi',
-  '.mov',
-  '.bin',
-  '.db',
-  '.sqlite',
-  '.doc',
-  '.docx',
-  '.xls',
-  '.xlsx',
-  '.ppt',
-  '.pptx',
-  '.class',
-  '.jar',
-])
 
 function getFileSuffix(fileName: string) {
   const lowerName = String(fileName || '').toLowerCase()
@@ -260,10 +204,6 @@ const FapSmbExternalExplorePanel = observer(() => {
   const exploreState = item ? fapSmbExternalStore.getExploreState(item.fileAccessPointId) : null
   const canWrite = fapSmbExternalStore.canWrite
   const explorerWrapRef = React.useRef<HTMLDivElement | null>(null)
-  const [messageState, setMessageState] = useState({
-    status: 'idle',
-    messageText: '',
-  })
   const [contextMenuState, setContextMenuState] = useState<{
     position: null | { x: number, y: number }
     rowId: null | string
@@ -297,6 +237,16 @@ const FapSmbExternalExplorePanel = observer(() => {
     fileKind: 'image',
   })
   const [pendingScrollRowId, setPendingScrollRowId] = useState('')
+  const messageState: ExploreMessageState = exploreState?.messageState || {
+    status: 'idle',
+    messageText: '',
+  }
+  const setMessageState = (nextMessageState: ExploreMessageState) => {
+    if (!item) {
+      return
+    }
+    fapSmbExternalStore.setExploreMessageState(item.fileAccessPointId, nextMessageState)
+  }
 
   useEffect(() => {
     return () => {
@@ -325,11 +275,14 @@ const FapSmbExternalExplorePanel = observer(() => {
   }, [pendingScrollRowId, exploreState?.items.length])
 
   const runExplore = async (path: string) => {
+    if (!item) {
+      return
+    }
     setMessageState({
       status: 'loading',
       messageText: `Listing path: ${path}`,
     })
-    const result = await fapSmbExternalStore.requestExplore(path)
+    const result = await fapSmbExternalStore.requestExplore(item.fileAccessPointId, path)
     setMessageState({
       status: result?.isSuccess ? 'success' : 'error',
       messageText: result?.messageText || '',
@@ -516,7 +469,7 @@ const FapSmbExternalExplorePanel = observer(() => {
     event.preventDefault()
     event.stopPropagation()
     const normalizedRowId = String(rowId || '')
-    if (item && normalizedRowId && !exploreState?.selectedRowIds.includes(normalizedRowId)) {
+    if (item && normalizedRowId && !exploreState?.rowsSelectedId.includes(normalizedRowId)) {
       fapSmbExternalStore.setExploreSelectedRowIds(item.fileAccessPointId, [normalizedRowId])
     }
     setContextMenuState({
@@ -695,7 +648,13 @@ const FapSmbExternalExplorePanel = observer(() => {
       </div>
       <div
         ref={explorerWrapRef}
-        className="list-wrap explorer-table-wrap"
+        className="list-wrap explorer-table-wrap external-explorer-table"
+        onMouseDownCapture={(event) => {
+          const rowElement = (event.target as HTMLElement | null)?.closest?.('[data-row-id]')
+          if (event.shiftKey && rowElement) {
+            event.preventDefault()
+          }
+        }}
         onContextMenu={(event) => {
           const rowElement = (event.target as HTMLElement | null)?.closest?.('[data-row-id]')
           if (rowElement) {
@@ -713,7 +672,7 @@ const FapSmbExternalExplorePanel = observer(() => {
           showStatusBar={false}
           listOnly={true}
           selectionMode="multiple"
-          selectedRowIds={exploreState?.selectedRowIds || []}
+          rowsSelectedId={exploreState?.rowsSelectedId || []}
           onSelectedRowIdsChange={(rowIds: string[]) => {
             fapSmbExternalStore.setExploreSelectedRowIds(item.fileAccessPointId, rowIds)
           }}
@@ -787,7 +746,7 @@ const FapSmbExternalExplorePanel = observer(() => {
                 type: 'item',
                 name: 'Download Zip',
                 data: { action: 'download-zip' },
-                disabled: !contextMenuState.rowId?.startsWith('d:') || fapSmbExternalStore.isZipRunning || Boolean(exploreState?.renamingRowId),
+                disabled: !contextMenuState.rowId || fapSmbExternalStore.isZipRunning || Boolean(exploreState?.renamingRowId),
               },
               {
                 type: 'item',
@@ -859,8 +818,11 @@ const FapSmbExternalExplorePanel = observer(() => {
             if (menuItem?.data?.action === 'open-text' && !exploreItem.isDirectory) {
               requestOpenTextEditorWithCheck(exploreItem)
             }
-            if (menuItem?.data?.action === 'download-zip' && exploreItem.isDirectory) {
-              fapSmbExternalStore.requestStartZip(buildNextPath(exploreState?.path || '/', exploreItem.name))
+            if (menuItem?.data?.action === 'download-zip') {
+              fapSmbExternalStore.requestStartZip(
+                buildNextPath(exploreState?.path || '/', exploreItem.name),
+                exploreItem.isDirectory,
+              )
             }
             if (menuItem?.data?.action === 'rename' && item && canWrite) {
               const rowId = contextMenuState.rowId || ''
