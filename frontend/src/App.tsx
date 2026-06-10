@@ -4,11 +4,15 @@ import { Login, SpinningCircle } from '@wwf971/react-comp-misc'
 import './App.css'
 import ResourceTree from './ResourceTree'
 import ResourcePanel from './ResourcePanel'
+import Header from './Header'
+import TaskCopyMovePanel from './common/TaskCopyMovePanel'
+import TaskPanel from './common/TaskPanel'
 import FapSmbExternalEditorTxt from './fapSmbExternal/FapSmbExternalEditorTxt'
 import FapSmbExternalUploadFile from './fapSmbExternal/FapSmbExternalUploadFile'
 import { appStore } from './store/appStore'
 import { authStore } from './store/authStore'
 import { fapSmbExternalStore } from './store/fapSmbExternalStore'
+import { taskStore } from './store/taskStore'
 
 const App = observer(() => {
   useEffect(() => {
@@ -18,6 +22,19 @@ const App = observer(() => {
   useEffect(() => {
     if (authStore.isLoggedIn) {
       appStore.bootstrap()
+    }
+  }, [authStore.isLoggedIn])
+
+  useEffect(() => {
+    if (!authStore.isLoggedIn) {
+      return undefined
+    }
+    taskStore.requestLoadList()
+    const timerId = window.setInterval(() => {
+      taskStore.requestLoadList()
+    }, 3000)
+    return () => {
+      window.clearInterval(timerId)
     }
   }, [authStore.isLoggedIn])
 
@@ -45,6 +62,7 @@ const App = observer(() => {
 
   return (
     <div className="app-root">
+      <Header />
       <div className="app-layout">
         <aside className="left-panel">
           <ResourceTree />
@@ -75,6 +93,8 @@ const App = observer(() => {
       ) : null}
       <FapSmbExternalEditorTxt />
       <FapSmbExternalUploadFile />
+      <TaskCopyMovePanel />
+      <TaskPanel />
     </div>
   )
 })

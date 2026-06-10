@@ -20,6 +20,7 @@ class AuthStore {
   message = ''
   messageType: 'error' | 'success' = 'error'
   isPasswordVisible = false
+  isMenuOpen = false
   permission = 'R'
 
   constructor() {
@@ -107,10 +108,15 @@ class AuthStore {
       this.token = ''
       this.isLoggedIn = false
       this.permission = 'R'
+      this.isMenuOpen = false
       this.message = 'Session expired, please login again'
       this.messageType = 'error'
     })
     this.saveToken('')
+  }
+
+  setMenuOpen(isOpen: boolean) {
+    this.isMenuOpen = isOpen
   }
 
   async submitCredentialsLogin() {
@@ -129,6 +135,7 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.username = String(data.username || this.username)
         this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
         this.password = ''
@@ -167,6 +174,7 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.username = String(data.username || '')
         this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
         this.message = 'Login success'
@@ -230,6 +238,20 @@ class AuthStore {
       return this.submitTokenLogin()
     }
     return { code: -1, message: `unsupported action: ${type}` }
+  }
+
+  logout() {
+    runInAction(() => {
+      this.isLoggedIn = false
+      this.username = ''
+      this.password = ''
+      this.token = ''
+      this.permission = 'R'
+      this.isMenuOpen = false
+      this.message = 'Logged out'
+      this.messageType = 'success'
+    })
+    this.saveToken('')
   }
 }
 

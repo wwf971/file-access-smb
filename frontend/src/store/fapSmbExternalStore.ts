@@ -450,7 +450,7 @@ export class FapSmbExternalStore {
     formData.append('uploadName', uploadName)
     formData.append('file', uploadItem.file, uploadItem.fileName)
     const authToken = String(authStore.token || '')
-    const url = withAuthQuery(resolveApiUrl('/file-access-point/explore/upload'), authToken)
+    const url = withAuthQuery(resolveApiUrl('/fap-smb-external/explore/upload'), authToken)
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', url)
@@ -536,7 +536,7 @@ export class FapSmbExternalStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/list')
+      const data = await requestAuthenticatedJson('/fap-smb-external/list')
       const items = Array.isArray(data.items) ? (data.items as FapSmbExternalItem[]) : []
       runInAction(() => {
         this.items = items
@@ -578,7 +578,7 @@ export class FapSmbExternalStore {
       this.isSaving = true
     })
     try {
-      await requestAuthenticatedJson('/file-access-point/create', {
+      await requestAuthenticatedJson('/fap-smb-external/create', {
         method: 'POST',
         body: JSON.stringify({
           name: `smb_${Date.now()}`,
@@ -620,7 +620,7 @@ export class FapSmbExternalStore {
       this.isSaving = true
     })
     try {
-      await requestAuthenticatedJson('/file-access-point/update', {
+      await requestAuthenticatedJson('/fap-smb-external/update', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
@@ -654,7 +654,7 @@ export class FapSmbExternalStore {
     })
     try {
       const deletingId = this.selectedItem.fileAccessPointId
-      await requestAuthenticatedJson('/file-access-point/delete', {
+      await requestAuthenticatedJson('/fap-smb-external/delete', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: deletingId,
@@ -693,8 +693,8 @@ export class FapSmbExternalStore {
     }, normalizedTimeoutMs)
     try {
       const url = isForceReconnect
-        ? '/file-access-point/connection/reconnect'
-        : '/file-access-point/connection/check'
+        ? '/fap-smb-external/connection/reconnect'
+        : '/fap-smb-external/connection/check'
       await requestAuthenticatedJson(url, {
         method: 'POST',
         body: JSON.stringify({
@@ -735,7 +735,7 @@ export class FapSmbExternalStore {
       state.path = path
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/explore/list', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/explore/list', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: normalizedFileAccessPointId,
@@ -786,7 +786,7 @@ export class FapSmbExternalStore {
       state.renamingRowId = rowId
     })
     try {
-      await requestAuthenticatedJson('/file-access-point/explore/rename', {
+      await requestAuthenticatedJson('/fap-smb-external/explore/rename', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -828,7 +828,7 @@ export class FapSmbExternalStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/explore/new-file', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/explore/new-file', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -875,7 +875,7 @@ export class FapSmbExternalStore {
   }
 
   async requestExploreFileBlob(fileAccessPointId: string, targetPath: string): Promise<{ isSuccess: boolean, messageText: string, blob?: Blob }> {
-    const response = await requestAuthenticatedBlob('/file-access-point/explore/download', {
+    const response = await requestAuthenticatedBlob('/fap-smb-external/explore/download', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -902,7 +902,7 @@ export class FapSmbExternalStore {
       this.textEditorStatusText = 'creating backup'
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/explore/text/open', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/explore/text/open', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -958,7 +958,7 @@ export class FapSmbExternalStore {
       this.textEditorStatusText = 'saving'
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/explore/text/save', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/explore/text/save', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.textEditorFileAccessPointId,
@@ -997,7 +997,7 @@ export class FapSmbExternalStore {
     }
     const fileAccessPointId = this.selectedItem.fileAccessPointId
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/explore/text/clean-bak', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/explore/text/clean-bak', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -1035,7 +1035,7 @@ export class FapSmbExternalStore {
 
   async requestZipStatus(taskId: string) {
     const params = new URLSearchParams({ taskId })
-    const data = await requestAuthenticatedJson(`/file-access-point/zip/status?${params.toString()}`)
+    const data = await requestAuthenticatedJson(`/fap-smb-external/zip/status?${params.toString()}`)
     return {
       status: String(data.status || ''),
       statusMessage: String(data.statusMessage || ''),
@@ -1083,7 +1083,7 @@ export class FapSmbExternalStore {
 
   async requestDownloadZip(taskId: string) {
     const params = new URLSearchParams({ taskId })
-    const response = await requestAuthenticatedBlob(`/file-access-point/zip/download?${params.toString()}`)
+    const response = await requestAuthenticatedBlob(`/fap-smb-external/zip/download?${params.toString()}`)
     const blob = await response.blob()
     const downloadUrl = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
@@ -1101,7 +1101,7 @@ export class FapSmbExternalStore {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const authToken = String(authStore.token || '')
     const wsUrl = `${protocol}//${window.location.host}${withAuthQuery(
-      resolveApiUrl(`/file-access-point/zip/ws/${encodeURIComponent(taskId)}`),
+      resolveApiUrl(`/fap-smb-external/zip/ws/${encodeURIComponent(taskId)}`),
       authToken,
     )}`
     const ws = new WebSocket(wsUrl)
@@ -1187,7 +1187,7 @@ export class FapSmbExternalStore {
       this.zipStatusText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/file-access-point/zip/start', {
+      const data = await requestAuthenticatedJson('/fap-smb-external/zip/start', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
@@ -1216,7 +1216,7 @@ export class FapSmbExternalStore {
       return { isSuccess: false, messageText: 'no zip task' }
     }
     try {
-      await requestAuthenticatedJson('/file-access-point/zip/abort', {
+      await requestAuthenticatedJson('/fap-smb-external/zip/abort', {
         method: 'POST',
         body: JSON.stringify({
           taskId: this.zipTaskId,

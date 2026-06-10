@@ -12,6 +12,7 @@ import {
   TEXT_EDITOR_ALLOWED_SUFFIX_SET,
   TEXT_EDITOR_BLOCKED_SUFFIX_SET,
 } from '../config'
+import { taskStore, type TaskCopyMoveItem } from '../store/taskStore'
 
 function buildParentPath(path: string) {
   const normalized = String(path || '/')
@@ -465,6 +466,52 @@ const FapSmbExternalExplorePanel = observer(() => {
     })
   }
 
+  const openCopyMoveTaskPanel = (mode: 'copy' | 'move') => {
+    if (!item || !exploreState) {
+      return
+    }
+    const selectedRowIdList = exploreState.rowsSelectedId.length > 0
+      ? exploreState.rowsSelectedId
+      : (contextMenuState.rowId ? [contextMenuState.rowId] : [])
+    const fileAccessPointInfo = {
+      fileAccessPointType: 'smb/external' as const,
+      fileAccessPointId: item.fileAccessPointId,
+      fileAccessPointName: item.name,
+    }
+    const itemList = selectedRowIdList
+      .map((rowId): TaskCopyMoveItem | null => {
+        const exploreItem = getExploreItemByRowId(rowId)
+        if (!exploreItem) {
+          return null
+        }
+        const pathSource = buildNextPath(exploreState.path || '/', exploreItem.name)
+        return {
+          name: exploreItem.name,
+          pathSource,
+          pathTarget: pathSource,
+          fileAccessPointSource: fileAccessPointInfo,
+          fileAccessPointTarget: fileAccessPointInfo,
+          isDirectory: exploreItem.isDirectory,
+          sizeBytes: exploreItem.sizeBytes,
+        }
+      })
+      .filter((entry): entry is TaskCopyMoveItem => entry !== null)
+    if (itemList.length === 0) {
+      setMessageState({
+        status: 'error',
+        messageText: 'select item(s) to copy or move',
+      })
+      return
+    }
+    taskStore.openCopyMovePanel({
+      mode,
+      fileAccessPointId: item.fileAccessPointId,
+      fileAccessPointName: item.name,
+      targetFolderPath: exploreState.path || '/',
+      itemList,
+    })
+  }
+
   const openContextMenu = (event: MouseEvent | React.MouseEvent, rowId: string) => {
     event.preventDefault()
     event.stopPropagation()
@@ -750,6 +797,18 @@ const FapSmbExternalExplorePanel = observer(() => {
               },
               {
                 type: 'item',
+                name: 'Copy To',
+                data: { action: 'copy-to' },
+                disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+              },
+              {
+                type: 'item',
+                name: 'Move To',
+                data: { action: 'move-to' },
+                disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+              },
+              {
+                type: 'item',
                 name: 'Open',
                 data: { action: 'open' },
                 disabled: !contextMenuState.rowId?.startsWith('d:') || Boolean(exploreState?.renamingRowId),
@@ -823,6 +882,12 @@ const FapSmbExternalExplorePanel = observer(() => {
                 buildNextPath(exploreState?.path || '/', exploreItem.name),
                 exploreItem.isDirectory,
               )
+            }
+            if (menuItem?.data?.action === 'copy-to' && canWrite) {
+              openCopyMoveTaskPanel('copy')
+            }
+            if (menuItem?.data?.action === 'move-to' && canWrite) {
+              openCopyMoveTaskPanel('move')
             }
             if (menuItem?.data?.action === 'rename' && item && canWrite) {
               const rowId = contextMenuState.rowId || ''

@@ -17,7 +17,347 @@
   width: max(100%, 1040px);
   min-width: 1040px;
   gap: 4px;
-  min-height: calc(100vh - 8px);
+  min-height: calc(100vh - 42px);
+}
+
+.app-header-root {
+  position: sticky;
+  top: 4px;
+  z-index: 5000;
+  width: max(100%, 1040px);
+  min-width: 1040px;
+  min-height: 32px;
+  border: 1px solid #cfd9ea;
+  border-radius: 3px;
+  background: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 5px;
+  margin-bottom: 4px;
+}
+
+.app-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f3761;
+}
+
+.app-header-spacer {
+  flex: 1;
+}
+
+.app-header-task-wrap,
+.app-header-login-wrap {
+  position: relative;
+}
+
+.app-header-btn {
+  border: 1px solid #abc0e0;
+  background: #eaf1fd;
+  color: #17305f;
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-size: 12px;
+  height: 24px;
+}
+
+.app-header-menu {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  border: 1px solid #c8d3e5;
+  border-radius: 3px;
+  background: #ffffff;
+  box-shadow: 0 3px 12px rgba(64, 76, 98, 0.16);
+  z-index: 5020;
+}
+
+.task-dropdown-menu {
+  width: 420px;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.task-dropdown-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 12px;
+  color: #1f3761;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.task-dropdown-list {
+  max-height: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-dropdown-empty,
+.task-dropdown-error {
+  border: 1px solid #d8e0ee;
+  border-radius: 3px;
+  background: #f8fbff;
+  color: #48648f;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.task-dropdown-error {
+  border-color: #f2c2c2;
+  background: #fff2f2;
+  color: #8c2a2a;
+  margin-top: 4px;
+}
+
+.login-dropdown-menu {
+  width: 180px;
+  padding: 5px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.login-dropdown-status {
+  font-size: 12px;
+  color: #334766;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-item-root {
+  border: 1px solid #d8e0ee;
+  border-radius: 3px;
+  background: #f9fbff;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.task-item-root.is-selected {
+  border-color: #89a9d8;
+  background: #eef5ff;
+}
+
+.task-item-main {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  display: grid;
+  grid-template-columns: 72px 48px minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  padding: 0;
+  color: #1d2c44;
+  text-align: left;
+}
+
+.task-item-status {
+  border: 1px solid #c7d3e8;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 11px;
+  text-align: center;
+}
+
+.task-item-status.status-undergoing {
+  background: #edf3ff;
+  color: #1b4d96;
+}
+
+.task-item-status.status-success {
+  background: #edf9ef;
+  color: #1b7a2f;
+}
+
+.task-item-status.status-fail {
+  background: #fff2f2;
+  color: #8c2a2a;
+}
+
+.task-item-status.status-cancel {
+  background: #f3f4f7;
+  color: #59677a;
+}
+
+.task-item-title,
+.task-item-message {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.task-panel-overlay,
+.task-copy-move-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(80, 88, 102, 0.34);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9180;
+}
+
+.task-panel-popup,
+.task-copy-move-popup {
+  width: min(860px, calc(100vw - 24px));
+  max-height: min(640px, calc(100vh - 24px));
+  border: 1px solid #c8d1df;
+  border-radius: 5px;
+  background: #ffffff;
+  padding: 6px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.task-panel-top-row,
+.task-copy-move-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.task-panel-title-wrap,
+.task-copy-move-title-wrap {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.task-panel-title,
+.task-copy-move-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f3761;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-panel-subtitle,
+.task-copy-move-subtitle {
+  font-size: 11px;
+  color: #48648f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-panel-summary-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 12px;
+  color: #48648f;
+}
+
+.task-panel-table-wrap,
+.task-copy-move-table-wrap {
+  min-height: 292px;
+}
+
+.task-panel-cell,
+.task-copy-move-cell {
+  min-height: 20px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-panel-status {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-panel-status.status-undergoing {
+  color: #1b4d96;
+}
+
+.task-panel-status.status-success {
+  color: #1b7a2f;
+}
+
+.task-panel-status.status-fail {
+  color: #8c2a2a;
+}
+
+.task-panel-status.status-cancel {
+  color: #59677a;
+}
+
+.task-panel-bottom-row,
+.task-copy-move-bottom-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.task-copy-move-path-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-copy-move-label {
+  width: 78px;
+  font-size: 12px;
+  color: #334766;
+}
+
+.task-copy-move-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-copy-move-message {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #cfd8ea;
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 12px;
+  box-sizing: border-box;
+}
+
+.task-copy-move-message.status-info {
+  background: #edf3ff;
+  color: #1b4d96;
+}
+
+.task-copy-move-message.status-error {
+  background: #fff2f2;
+  border-color: #f2c2c2;
+  color: #8c2a2a;
 }
 
 .left-panel {

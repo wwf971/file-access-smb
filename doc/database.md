@@ -1,6 +1,6 @@
 ## Database
 
-This service stores user-created SMB file access points and SMB internal file metadata.
+This service stores user-created SMB file access points, SMB internal file metadata, and task state.
 
 SMB external table:
 
@@ -21,6 +21,52 @@ SMB internal file access point table:
   - `metadata` jsonb
   - `createdAt` timestamptz
   - `updatedAt` timestamptz
+
+Task table:
+
+- `task`
+  - `taskId` bigint primary key
+  - `userId` text
+  - `taskType` integer
+  - `taskStatus` integer
+  - `taskStatusText` text
+  - `taskInfo` jsonb
+  - `createdAt` timestamptz
+  - `createdAtTimeZone` integer
+  - `updatedAt` timestamptz
+  - `updatedAtTimeZone` integer
+  - `startedAt` timestamptz
+  - `startedAtTimeZone` integer
+  - `finishedAt` timestamptz
+  - `finishedAtTimeZone` integer
+  - `heartbeatAt` timestamptz
+  - `heartbeatAtTimeZone` integer
+
+`taskId` uses the project `ms_48` id format. It is stored as a positive `bigint` in PostgreSQL and displayed by API/UI as a base36 string with digits `0-9` and lowercase letters `a-z`.
+
+`taskType` values:
+
+- `1`: SMB external upload
+- `2`: SMB external zip download
+- `3`: SMB external copy
+- `4`: SMB external move
+
+`taskStatus` values:
+
+- `1`: undergoing
+- `2`: success
+- `3`: fail
+- `4`: cancel
+
+`taskInfo` stores task input, progress, result, and exit information as JSON. Its schema is documented in `./task.md`.
+
+`taskStatusText` stores the latest task status message. It mirrors the latest item in `taskInfo.taskProgress.progressList`.
+
+Timezone columns store UTC offset in minutes. API display should follow the project time format, for example `20260520_23250530+09`.
+
+`heartbeatAt` is used by frontend-owned tasks, especially upload, so the backend can fail stale undergoing tasks when the page disconnects before completion.
+
+Generated task assets are stored under `.runtime/task_asset/`. Asset file names include the base36 display task id, for example `{taskId}.zip` or `{taskId}-0.zip`. Asset metadata is stored in `taskInfo.assetInfo.assetById`.
 
 Per SMB internal file table:
 
@@ -83,3 +129,4 @@ Startup behavior:
 Used by:
 
 - backend runtime and endpoints in `./backend.md`
+- task model in `./task.md`

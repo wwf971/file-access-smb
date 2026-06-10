@@ -47,7 +47,7 @@ File rename:
 Storage rebalance:
 
 - dynamic folder depth is handled by a maintenance API, not during normal read requests
-- `POST /api/smb-internal-file-access-point/file/storage/rebalance` plans or executes path changes
+- `POST /api/fap-smb-internal/file/storage/rebalance` plans or executes path changes
 - request fields are `fileAccessPointId`, `maxFilesPerFolder`, `maxDepth`, `limit`, and `isDryRun`
 - dry run returns the target depth and files that would move
 - execution moves SMB files, updates each row's `filePath`, and stores `storageFolderDepth` in database-backed internal metadata

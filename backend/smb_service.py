@@ -7,7 +7,7 @@ from threading import Lock
 from time import time
 from typing import Any
 
-from smbclient import delete_session, mkdir, open_file, register_session, remove, rename, scandir
+from smbclient import delete_session, mkdir, open_file, register_session, remove, rename, rmdir, scandir
 from smbprotocol.exceptions import SMBAuthenticationError, SMBOSError
 
 BACKUP_FILE_NAME_RE = re.compile(r"^.+-bak-\d{8}_\d{8}[+-]\d{2}(?:\.[^./\\]+)?$")
@@ -298,6 +298,116 @@ class SmbConnectionManager:
                 "sourcePath": normalized_source_path,
                 "targetPath": normalized_target_path,
             }
+
+    def copy_path(self, file_access_point_id: str, metadata: dict[str, Any], source_path: str, target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+
+            def copy_item(source_item_path: str, target_item_path: str):
+                normalized_source = normalize_path(source_item_path)
+                normalized_target = normalize_path(target_item_path)
+                if normalized_source == "/" or normalized_target == "/":
+                    raise RuntimeError("sourcePath and targetPath should not be root")
+                source_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_source))
+                try:
+                    source_entry_list = list(scandir(source_unc_path))
+                except Exception:
+                    source_entry_list = None
+                if source_entry_list is None:
+                    copy_file(normalized_source, normalized_target)
+                    return
+                self._ensure_dir_unlocked(host, share, metadata, normalized_target)
+                for entry in source_entry_list:
+                    child_source = join_path(normalized_source, str(entry.name))
+                    child_target = join_path(normalized_target, str(entry.name))
+                    if entry.is_dir():
+                        copy_item(child_source, child_target)
+                        continue
+                    copy_file(child_source, child_target)
+
+            def copy_file(source_file_path: str, target_file_path: str):
+                normalized_source = normalize_path(source_file_path)
+                normalized_target = normalize_path(target_file_path)
+                target_parent_path, _target_name = split_parent_and_name(normalized_target)
+                self._ensure_dir_unlocked(host, share, metadata, target_parent_path)
+                source_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_source))
+                target_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_target))
+                with open_file(source_unc_path, mode="rb") as source_obj:
+                    file_bytes = source_obj.read()
+                with open_file(target_unc_path, mode="wb") as target_obj:
+                    target_obj.write(file_bytes)
+
+            copy_item(source_path, target_path)
+            return {
+                "sourcePath": normalize_path(source_path),
+                "targetPath": normalize_path(target_path),
+            }
+
+    def move_path(self, file_access_point_id: str, metadata: dict[str, Any], source_path: str, target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+            normalized_source_path = normalize_path(source_path)
+            normalized_target_path = normalize_path(target_path)
+            if normalized_source_path == "/" or normalized_target_path == "/":
+                raise RuntimeError("sourcePath and targetPath should not be root")
+            target_parent_path, _target_name = split_parent_and_name(normalized_target_path)
+            self._ensure_dir_unlocked(host, share, metadata, target_parent_path)
+            rename(
+                build_unc_path(host, share, resolve_metadata_path(metadata, normalized_source_path)),
+                build_unc_path(host, share, resolve_metadata_path(metadata, normalized_target_path)),
+            )
+            return {
+                "sourcePath": normalized_source_path,
+                "targetPath": normalized_target_path,
+            }
+
+    def remove_path(self, file_access_point_id: str, metadata: dict[str, Any], target_path: str):
+        self.connect(file_access_point_id, metadata, force_reconnect=False)
+        lock = self._get_lock(file_access_point_id)
+        with lock:
+            host = str(metadata.get("host") or "").strip()
+            share = str(metadata.get("share") or "").strip()
+
+            def remove_item(path_value: str):
+                normalized_path = normalize_path(path_value)
+                if normalized_path == "/":
+                    raise RuntimeError("cannot remove root path")
+                unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, normalized_path))
+                try:
+                    entry_list = list(scandir(unc_path))
+                    for entry in entry_list:
+                        remove_item(join_path(normalized_path, str(entry.name)))
+                    rmdir(unc_path)
+                except Exception:
+                    remove(unc_path)
+
+            remove_item(target_path)
+            return {"path": normalize_path(target_path)}
+
+    def _ensure_dir_unlocked(self, host: str, share: str, metadata: dict[str, Any], target_path: str):
+        normalized_path = normalize_path(target_path)
+        if normalized_path == "/":
+            build_unc_path(host, share, resolve_metadata_path(metadata, "/"))
+            return {"path": "/"}
+        current_path = ""
+        for path_part in [part for part in normalized_path.split("/") if part]:
+            parent_path = normalize_path(current_path or "/")
+            current_path = f"{parent_path.rstrip('/')}/{path_part}" if parent_path != "/" else f"/{path_part}"
+            parent_unc_path = build_unc_path(host, share, resolve_metadata_path(metadata, parent_path))
+            entry_map = {str(entry.name): entry for entry in scandir(parent_unc_path)}
+            existing_entry = entry_map.get(path_part)
+            if existing_entry is not None:
+                if not existing_entry.is_dir():
+                    raise RuntimeError(f"path exists but is not a folder: {current_path}")
+                continue
+            mkdir(build_unc_path(host, share, resolve_metadata_path(metadata, current_path)))
+        return {"path": normalized_path}
 
     def create_backup_file(
         self,

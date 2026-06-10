@@ -78,14 +78,14 @@ register_fap_smb_internal_routes(app, make_json_response)
 def auth_guard():
     path = str(request.path or "")
     protected_prefixes = (
-        "/file-access-point/",
-        "/smb-internal-file-access-point/",
+        "/fap-smb-external/",
+        "/fap-smb-internal/",
         "/health/database",
         "/login/check",
     )
     if not path.startswith(protected_prefixes):
         return None
-    if path.startswith("/file-access-point/zip/ws/"):
+    if path.startswith("/fap-smb-external/zip/ws/"):
         return None
     if path in (
         "/login",

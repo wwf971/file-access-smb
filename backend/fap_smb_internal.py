@@ -551,7 +551,7 @@ def _delete_internal_fap(file_access_point_id: str):
 
 
 def register_fap_smb_internal_routes(app, make_json_response):
-    @app.get("/smb-internal-file-access-point/list")
+    @app.get("/fap-smb-internal/list")
     def smb_internal_file_access_point_list():
         if not has_request_permission("R"):
             return make_json_response(-1, message="read permission required"), 403
@@ -561,7 +561,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/create")
+    @app.post("/fap-smb-internal/create")
     def smb_internal_file_access_point_create():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -573,7 +573,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/update")
+    @app.post("/fap-smb-internal/update")
     def smb_internal_file_access_point_update():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -588,7 +588,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/delete")
+    @app.post("/fap-smb-internal/delete")
     def smb_internal_file_access_point_delete():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -599,8 +599,8 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.get("/smb-internal-file-access-point/file/list")
-    @app.post("/smb-internal-file-access-point/file/list")
+    @app.get("/fap-smb-internal/file/list")
+    @app.post("/fap-smb-internal/file/list")
     def smb_internal_file_list():
         if not has_request_permission("R"):
             return make_json_response(-1, message="read permission required"), 403
@@ -663,7 +663,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/file/upload")
+    @app.post("/fap-smb-internal/file/upload")
     def smb_internal_file_upload():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -747,8 +747,8 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.get("/smb-internal-file-access-point/file/download")
-    @app.post("/smb-internal-file-access-point/file/download")
+    @app.get("/fap-smb-internal/file/download")
+    @app.post("/fap-smb-internal/file/download")
     def smb_internal_file_download():
         if not has_request_permission("R"):
             return make_json_response(-1, message="read permission required"), 403
@@ -786,7 +786,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/file/move")
+    @app.post("/fap-smb-internal/file/move")
     def smb_internal_file_move():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -859,7 +859,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/file/storage/rebalance")
+    @app.post("/fap-smb-internal/file/storage/rebalance")
     def smb_internal_file_storage_rebalance():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403
@@ -1001,7 +1001,7 @@ def register_fap_smb_internal_routes(app, make_json_response):
         except Exception as error:
             return make_json_response(-1, message=str(error)), 500
 
-    @app.post("/smb-internal-file-access-point/file/delete")
+    @app.post("/fap-smb-internal/file/delete")
     def smb_internal_file_delete():
         if not has_request_permission("W"):
             return make_json_response(-1, message="write permission required"), 403

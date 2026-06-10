@@ -160,7 +160,7 @@ export class FapSmbInternalStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/smb-internal-file-access-point/list')
+      const data = await requestAuthenticatedJson('/fap-smb-internal/list')
       const items = Array.isArray(data.items) ? (data.items as FapSmbInternalItem[]) : []
       runInAction(() => {
         this.items = items
@@ -195,7 +195,7 @@ export class FapSmbInternalStore {
       this.errorText = ''
     })
     try {
-      await requestAuthenticatedJson('/smb-internal-file-access-point/create', {
+      await requestAuthenticatedJson('/fap-smb-internal/create', {
         method: 'POST',
         body: JSON.stringify({
           name: `smb_internal_${Date.now()}`,
@@ -241,7 +241,7 @@ export class FapSmbInternalStore {
       this.errorText = ''
     })
     try {
-      await requestAuthenticatedJson('/smb-internal-file-access-point/update', {
+      await requestAuthenticatedJson('/fap-smb-internal/update', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId: this.selectedItem.fileAccessPointId,
@@ -278,7 +278,7 @@ export class FapSmbInternalStore {
       this.errorText = ''
     })
     try {
-      await requestAuthenticatedJson('/smb-internal-file-access-point/delete', {
+      await requestAuthenticatedJson('/fap-smb-internal/delete', {
         method: 'POST',
         body: JSON.stringify({ fileAccessPointId }),
       })
@@ -310,7 +310,7 @@ export class FapSmbInternalStore {
       this.pageIndexByFileAccessPointId[fileAccessPointId] = pageIndex
     })
     try {
-      const data = await requestAuthenticatedJson('/smb-internal-file-access-point/file/list', {
+      const data = await requestAuthenticatedJson('/fap-smb-internal/file/list', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
@@ -358,7 +358,7 @@ export class FapSmbInternalStore {
     if (!this.selectedItem || !fileItem) {
       return { isSuccess: false, messageText: 'no file selected' }
     }
-    const response = await requestAuthenticatedBlob('/smb-internal-file-access-point/file/download', {
+    const response = await requestAuthenticatedBlob('/fap-smb-internal/file/download', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -435,7 +435,7 @@ export class FapSmbInternalStore {
       this.renamingFileIdByFileAccessPointId[fileAccessPointId] = fileItem.fileId
     })
     try {
-      const data = await requestAuthenticatedJson('/smb-internal-file-access-point/file/move', {
+      const data = await requestAuthenticatedJson('/fap-smb-internal/file/move', {
         method: 'POST',
         body: JSON.stringify({
           fileAccessPointId,
