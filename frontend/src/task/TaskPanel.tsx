@@ -1,6 +1,6 @@
 import { observer } from 'mobx-react-lite'
 import { FolderView, SpinningCircle } from '@wwf971/react-comp-misc'
-import { getTaskStatusLabel, getTaskTypeLabel, taskStore, TASK_STATUS } from '../store/taskStore'
+import { getTaskLatestMessage, getTaskStatusLabel, getTaskTypeLabel, taskStore, TASK_STATUS } from '../store/taskStore'
 
 const TASK_ITEM_COLUMNS = {
   name: { data: 'name', align: 'left' },
@@ -56,7 +56,7 @@ const TaskPanel = observer(() => {
               {getTaskTypeLabel(task.taskType)} task {task.taskId}
             </div>
             <div className="task-panel-subtitle">
-              {getTaskStatusLabel(task.taskStatus)} {task.taskStatusText}
+              {getTaskStatusLabel(task.taskStatus)} {getTaskLatestMessage(task)}
             </div>
           </div>
           <button
@@ -90,6 +90,16 @@ const TaskPanel = observer(() => {
           />
         </div>
         <div className="task-panel-bottom-row">
+          <button
+            type="button"
+            className="main-btn"
+            disabled={task.taskStatus !== TASK_STATUS.fail || taskStore.isResubmitting}
+            onClick={() => {
+              taskStore.requestResubmitTask(task.taskId)
+            }}
+          >
+            re-submit task
+          </button>
           <button
             type="button"
             className="main-btn"

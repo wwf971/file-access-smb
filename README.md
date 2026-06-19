@@ -6,6 +6,12 @@ SMB network disk access service that does not require having the SMB disks mount
 - frontend: Vite + React + MobX
 - data: PostgreSQL (user-created SMB file access points)
 
+## File Access Point
+
+`File access point` is the key concept of this service. A file access point is a abstraction of file resources on an SMB network disk. it specifies from where, and how files are accessed.
+
+Currently supported file access point type: `smb/external`, which basically corresponds to a folder on an smb network disk. `smb/internal` where the service manages the files in side this file access point. `smb/internal` file access point is based on `smb/external` file access point.
+
 `fap` is used as a short name for file access point. In code, `fapSmbExternal` means an `smb/external` file access point, and `fapSmbInternal` means an `smb/internal` file access point.
 
 ## Documents:

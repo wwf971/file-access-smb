@@ -13,34 +13,31 @@ function safeParseObject(text: string) {
 }
 
 type ServicePanelProps = {
-  mode: 'metadata' | 'basic-info' | 'database'
+  mode: 'metadata' | 'basic-info'
 }
 
 const ServicePanel = observer(({ mode }: ServicePanelProps) => {
   const databaseData = safeParseObject(serviceStore.databaseText)
   const pingData = safeParseObject(serviceStore.pingText)
-  const titleText = mode === 'database' ? 'Service Database' : mode === 'basic-info' ? 'Service Basic Info' : 'Service Metadata'
-  const panelData = mode === 'database'
+  const titleText = mode === 'basic-info' ? 'Service Basic Info' : 'Service Metadata'
+  const panelData = mode === 'basic-info'
     ? [
+        { key: 'service', value: String(pingData.service || '') },
+        { key: 'status', value: String(pingData.status || '') },
+        { key: 'databaseBootstrapOk', value: String(pingData.isDatabaseBootstrapOk || '') },
+        { key: 'databaseBootstrapErrorText', value: String(pingData.databaseBootstrapErrorText || '') },
         { key: 'databaseKey', value: String(databaseData.databaseKey || '') },
         { key: 'databaseName', value: String(databaseData.databaseName || '') },
         { key: 'databaseHost', value: String(databaseData.host || '') },
         { key: 'databasePort', value: String(databaseData.port || '') },
         { key: 'databaseUser', value: String(databaseData.username || '') },
       ]
-    : mode === 'basic-info'
-      ? [
-          { key: 'service', value: String(pingData.service || '') },
-          { key: 'status', value: String(pingData.status || '') },
-          { key: 'databaseBootstrapOk', value: String(pingData.isDatabaseBootstrapOk || '') },
-          { key: 'databaseBootstrapErrorText', value: String(pingData.databaseBootstrapErrorText || '') },
-        ]
-      : [
-          { key: 'service', value: String(pingData.service || '') },
-          { key: 'status', value: String(pingData.status || '') },
-          { key: 'databaseKey', value: String(databaseData.databaseKey || '') },
-          { key: 'databaseName', value: String(databaseData.databaseName || '') },
-        ]
+    : [
+        { key: 'service', value: String(pingData.service || '') },
+        { key: 'status', value: String(pingData.status || '') },
+        { key: 'databaseKey', value: String(databaseData.databaseKey || '') },
+        { key: 'databaseName', value: String(databaseData.databaseName || '') },
+      ]
   return (
     <div className="panel-root">
       <div className="panel-title">{titleText}</div>

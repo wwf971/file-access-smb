@@ -4,6 +4,7 @@ import { TreeView } from '@wwf971/react-comp-misc'
 import { appStore, PAGE_KEY } from './store/appStore'
 import { fapSmbExternalStore } from './store/fapSmbExternalStore'
 import { fapSmbInternalStore, getFapSmbInternalSourceLabel } from './store/fapSmbInternalStore'
+import { taskStore } from './store/taskStore'
 
 const ResourceTree = observer(() => {
   const TreeViewComp = TreeView as any
@@ -20,7 +21,7 @@ const ResourceTree = observer(() => {
         text: 'Service',
         isLeaf: false,
         isExpanded: expandedById.service === true,
-        childrenIds: ['service:metadata', 'service:basic-info', 'service:database'],
+        childrenIds: ['service:metadata', 'service:basic-info', 'service:task'],
         childrenLoadState: 'loaded',
       },
       'service:metadata': {
@@ -39,13 +40,13 @@ const ResourceTree = observer(() => {
         childrenIds: [],
         childrenLoadState: 'loaded',
       },
-      'service:database': {
-        id: 'service:database',
-        text: 'database',
+      'service:task': {
+        id: 'service:task',
+        text: `tasks (${taskStore.taskItems.length})`,
         isLeaf: true,
         isExpanded: false,
         childrenIds: [],
-        childrenLoadState: 'loaded',
+        childrenLoadState: taskStore.isListLoading ? 'loading' : 'loaded',
       },
       fapSmbExternal: {
         id: 'fapSmbExternal',
@@ -163,19 +164,21 @@ const ResourceTree = observer(() => {
     fapSmbExternalStore.isListLoading,
     fapSmbInternalStore.items,
     fapSmbInternalStore.isListLoading,
+    taskStore.taskItems.length,
+    taskStore.isListLoading,
   ])
 
   return (
     <TreeViewComp
-      rootItemIds={treeData.rootItemIds}
-      getItemDataById={(itemId) => treeData.itemDataById[itemId] || null}
-      selectedItemId={
-        appStore.currentPageKey === PAGE_KEY.serviceMetadata
+      data={{
+        itemRootIds: treeData.rootItemIds,
+        itemDataById: treeData.itemDataById,
+        itemSelectedId: appStore.currentPageKey === PAGE_KEY.serviceMetadata
           ? 'service:metadata'
           : appStore.currentPageKey === PAGE_KEY.serviceBasicInfo
             ? 'service:basic-info'
-          : appStore.currentPageKey === PAGE_KEY.serviceDatabase
-            ? 'service:database'
+          : appStore.currentPageKey === PAGE_KEY.serviceTask
+            ? 'service:task'
           : appStore.currentPageKey === PAGE_KEY.fapSmbExternalOverview
             ? 'fapSmbExternal:overview'
           : appStore.currentPageKey === PAGE_KEY.fapSmbInternalOverview
@@ -188,54 +191,58 @@ const ResourceTree = observer(() => {
             ? `fapSmbInternal:${fapSmbInternalStore.selectedId}:${fapSmbInternalStore.selectedPanel}`
           : fapSmbExternalStore.selectedId
             ? `fapSmbExternal:${fapSmbExternalStore.selectedId}:${fapSmbExternalStore.selectedPanel}`
-            : 'fapSmbExternal'
-      }
-      onDataChangeRequest={async (type: string, params: any) => {
-        if (type !== 'toggle-expand') return { code: 0 }
-        const itemId = String(params?.itemId || '')
-        const nextIsExpanded = params?.nextIsExpanded === true
-        setExpandedById((prev) => ({
-          ...prev,
-          [itemId]: nextIsExpanded,
-        }))
-        return { code: 0 }
+            : 'fapSmbExternal',
       }}
-      onItemClick={(itemId: string, itemData: any) => {
+      onEvent={async (eventType: string, eventData: any) => {
+        if (eventType === 'toggleExpand') {
+          const itemId = String(eventData?.itemId || '')
+          const nextIsExpanded = eventData?.nextIsExpanded === true
+          setExpandedById((prev) => ({
+            ...prev,
+            [itemId]: nextIsExpanded,
+          }))
+          return { code: 0 }
+        }
+        if (eventType !== 'itemClick') return { code: 0 }
+        const itemId = String(eventData?.itemId || '')
+        const itemData = eventData?.itemData
         if (itemId === 'service' || itemId === 'service:metadata') {
           appStore.selectServicePage(PAGE_KEY.serviceMetadata)
-          return
+          return { code: 0 }
         }
         if (itemId === 'service:basic-info') {
           appStore.selectServicePage(PAGE_KEY.serviceBasicInfo)
-          return
+          return { code: 0 }
         }
-        if (itemId === 'service:database') {
-          appStore.selectServicePage(PAGE_KEY.serviceDatabase)
-          return
+        if (itemId === 'service:task') {
+          appStore.selectServicePage(PAGE_KEY.serviceTask)
+          taskStore.requestLoadList()
+          return { code: 0 }
         }
         if (itemId === 'fapSmbExternal:overview' || itemId === 'fapSmbExternal') {
           appStore.selectFapSmbExternalOverview()
-          return
+          return { code: 0 }
         }
         if (itemId === 'fapSmbInternal:overview' || itemId === 'fapSmbInternal') {
           appStore.selectFapSmbInternalOverview()
-          return
+          return { code: 0 }
         }
         if (itemData?.fapSmbInternalId && itemData?.panel) {
           appStore.selectFapSmbInternal(String(itemData.fapSmbInternalId), itemData.panel)
-          return
+          return { code: 0 }
         }
         if (itemData?.fapSmbInternalId) {
           appStore.selectFapSmbInternal(String(itemData.fapSmbInternalId), 'config')
-          return
+          return { code: 0 }
         }
         if (itemData?.fileAccessPointId && itemData?.panel) {
           appStore.selectFapSmbExternal(String(itemData.fileAccessPointId), itemData.panel)
-          return
+          return { code: 0 }
         }
         if (itemData?.fileAccessPointId) {
           appStore.selectFapSmbExternal(String(itemData.fileAccessPointId), 'config')
         }
+        return { code: 0 }
       }}
     />
   )

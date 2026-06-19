@@ -7,7 +7,7 @@ import { serviceStore } from './serviceStore'
 export const PAGE_KEY = {
   serviceMetadata: 'service-metadata',
   serviceBasicInfo: 'service-basic-info',
-  serviceDatabase: 'service-database',
+  serviceTask: 'service-task',
   fapSmbExternalOverview: 'fap-smb-external-overview',
   fapSmbExternalConfig: 'fap-smb-external-config',
   fapSmbExternalExplore: 'fap-smb-external-explore',
@@ -40,7 +40,7 @@ class AppStore {
     if (
       pageKey !== PAGE_KEY.serviceMetadata
       && pageKey !== PAGE_KEY.serviceBasicInfo
-      && pageKey !== PAGE_KEY.serviceDatabase
+      && pageKey !== PAGE_KEY.serviceTask
     ) {
       this.currentPageKey = PAGE_KEY.serviceMetadata
       return

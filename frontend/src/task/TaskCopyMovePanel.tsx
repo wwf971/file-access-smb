@@ -1,5 +1,7 @@
 import { observer } from 'mobx-react-lite'
-import { FolderView, SpinningCircle } from '@wwf971/react-comp-misc'
+import { CheckIcon, CrossIcon, EditIcon, FolderView, SpinningCircle } from '@wwf971/react-comp-misc'
+import FapSmbExternalDirSelector from '../fapSmbExternal/FapSmbExternalDirSelector'
+import FapSmbExternalSelector from '../fapSmbExternal/FapSmbExternalSelector'
 import { taskStore } from '../store/taskStore'
 
 const COPY_MOVE_COLUMNS = {
@@ -20,13 +22,19 @@ const TaskCopyMovePanel = observer(() => {
   if (!taskStore.isCopyMovePanelOpen) {
     return null
   }
-  const targetFolderPath = normalizePath(taskStore.copyMoveTargetFolderPath)
+  const FolderViewComp = FolderView as any
+  const targetFolderPath = taskStore.copyMovePreviewTargetFolderPath
+  const targetFileAccessPoint = taskStore.copyMovePreviewTargetFileAccessPoint
   const rows = taskStore.copyMoveItemList.map((item, index) => ({
     id: `${index}`,
     data: {
       name: <div className="task-copy-move-cell" title={item.name}>{item.name}</div>,
       source: <div className="task-copy-move-cell" title={item.pathSource}>{item.pathSource}</div>,
-      target: <div className="task-copy-move-cell" title={joinPath(targetFolderPath, item.name)}>{joinPath(targetFolderPath, item.name)}</div>,
+      target: (
+        <div className="task-copy-move-cell" title={joinPath(targetFolderPath, item.name)}>
+          {targetFileAccessPoint ? `${targetFileAccessPoint.name}: ` : ''}{joinPath(targetFolderPath, item.name)}
+        </div>
+      ),
     },
   }))
 
@@ -51,17 +59,48 @@ const TaskCopyMovePanel = observer(() => {
         </div>
         <div className="task-copy-move-path-row">
           <div className="task-copy-move-label">target folder</div>
-          <input
-            className="text-input task-copy-move-input"
-            value={taskStore.copyMoveTargetFolderPath}
-            disabled={taskStore.isSubmitting}
-            onChange={(event) => {
-              taskStore.setCopyMoveTargetFolderPath(event.target.value)
-            }}
-          />
+          <div className="task-copy-move-input-wrap">
+            <input
+              className="text-input task-copy-move-input"
+              value={taskStore.copyMoveTargetFolderPath}
+              disabled={taskStore.isSubmitting}
+              onChange={(event) => {
+                taskStore.setCopyMoveTargetFolderPath(event.target.value)
+              }}
+            />
+            <button
+              type="button"
+              className="task-copy-move-icon-btn"
+              disabled={taskStore.isSubmitting}
+              title="select target folder"
+              onClick={() => {
+                taskStore.openCopyMoveSelector()
+              }}
+            >
+              <EditIcon width={13} height={13} />
+            </button>
+          </div>
         </div>
+        <div className="task-copy-move-option-row">
+          <button
+            type="button"
+            className={`task-copy-move-check ${taskStore.isCopyMoveEnsureTargetFolder ? 'is-checked' : ''}`}
+            role="checkbox"
+            aria-checked={taskStore.isCopyMoveEnsureTargetFolder}
+            disabled={taskStore.isSubmitting}
+            onClick={() => {
+              taskStore.setCopyMoveEnsureTargetFolder(!taskStore.isCopyMoveEnsureTargetFolder)
+            }}
+          >
+            <span className="task-copy-move-check-box">
+              {taskStore.isCopyMoveEnsureTargetFolder ? <CheckIcon width={12} height={12} /> : null}
+            </span>
+            <span>create target folder when missing</span>
+          </button>
+        </div>
+        <TaskCopyMoveTargetSelector />
         <div className="task-copy-move-table-wrap">
-          <FolderView
+          <FolderViewComp
             columns={COPY_MOVE_COLUMNS}
             columnsOrder={COPY_MOVE_COLUMNS_ORDER}
             columnsSizeInit={COPY_MOVE_COLUMNS_SIZE}
@@ -93,6 +132,62 @@ const TaskCopyMovePanel = observer(() => {
             submit task
           </button>
         </div>
+      </div>
+    </div>
+  )
+})
+
+const TaskCopyMoveTargetSelector = observer(() => {
+  if (!taskStore.copyMoveSelectorState.isOpen) {
+    return null
+  }
+  const selectedFileAccessPoint = taskStore.copyMoveSelectorFileAccessPoint
+  const exploreState = taskStore.copyMoveSelectorExploreState
+  return (
+    <div className="task-copy-move-selector-popup">
+      <div className="task-copy-move-selector-top-row">
+        <div className="task-copy-move-selector-title">select target by exploring</div>
+        <button
+          type="button"
+          className="task-copy-move-icon-btn"
+          onClick={() => {
+            taskStore.closeCopyMoveSelector()
+          }}
+        >
+          <CrossIcon size={13} />
+        </button>
+      </div>
+      <div className="task-copy-move-selector-body">
+        <FapSmbExternalSelector
+          items={taskStore.copyMoveSelectorFileAccessPointItems}
+          selectedItem={selectedFileAccessPoint}
+          searchText={taskStore.copyMoveSelectorState.searchText}
+          onSearchTextChange={taskStore.setCopyMoveSelectorSearchText}
+          onSelect={taskStore.selectCopyMoveSelectorFileAccessPoint}
+          onRefresh={taskStore.requestCopyMoveSelectorRefreshFaps}
+        />
+        <FapSmbExternalDirSelector
+          folderPath={taskStore.copyMoveSelectorState.selectedFolderPath}
+          items={exploreState?.items || []}
+          isLoading={exploreState?.isExploring || false}
+          isDisabled={!selectedFileAccessPoint}
+          onExplore={taskStore.requestCopyMoveSelectorExplore}
+        />
+      </div>
+      <div className="task-copy-move-selector-bottom-row">
+        <div className="task-copy-move-selector-message">
+          {taskStore.copyMoveSelectorState.messageText}
+        </div>
+        <button
+          type="button"
+          className="main-btn"
+          disabled={!selectedFileAccessPoint}
+          onClick={() => {
+            taskStore.applyCopyMoveSelectorTarget()
+          }}
+        >
+          use selected folder
+        </button>
       </div>
     </div>
   )

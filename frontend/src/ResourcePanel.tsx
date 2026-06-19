@@ -10,6 +10,7 @@ import FapSmbExternalExplorePanel from './fapSmbExternal/FapSmbExternalExplorePa
 import FapSmbInternalOverviewPanel from './fapSmbInternal/FapSmbInternalOverviewPanel'
 import FapSmbInternalConfigPanel from './fapSmbInternal/FapSmbInternalConfigPanel'
 import FapSmbInternalExplorePanel from './fapSmbInternal/FapSmbInternalExplorePanel'
+import TaskListPanel from './task/TaskListPanel'
 
 const ResourcePanel = observer(() => {
   if (appStore.currentPageKey === PAGE_KEY.serviceMetadata) {
@@ -18,8 +19,8 @@ const ResourcePanel = observer(() => {
   if (appStore.currentPageKey === PAGE_KEY.serviceBasicInfo) {
     return <ServicePanel mode="basic-info" />
   }
-  if (appStore.currentPageKey === PAGE_KEY.serviceDatabase) {
-    return <ServicePanel mode="database" />
+  if (appStore.currentPageKey === PAGE_KEY.serviceTask) {
+    return <TaskListPanel />
   }
   if (appStore.currentPageKey === PAGE_KEY.fapSmbExternalOverview) {
     return <FapSmbExternalOverviewPanel />

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import queue
+import re
 import sys
 import threading
 import zipfile
@@ -196,7 +197,7 @@ def _load_config_file_access_points():
     return item_list
 
 
-def _load_all_file_access_points():
+def _load_all_file_access_points(is_include_permission: bool = True):
     config_items = _load_config_file_access_points()
     db_items = []
     database_error_text = ""
@@ -226,7 +227,8 @@ def _load_all_file_access_points():
             "lastCheckUnixMs": state.last_check_unix_ms,
             "lastErrorText": state.last_error_text,
         }
-        item["permission"] = get_request_permission()
+        if is_include_permission:
+            item["permission"] = get_request_permission()
     return merged_list, database_error_text
 
 
@@ -248,7 +250,7 @@ def _find_file_access_point_by_id(file_access_point_id: str):
     target_variants = _decode_id_variants(file_access_point_id)
     if not target_variants:
         return None
-    merged_list, _database_error_text = _load_all_file_access_points()
+    merged_list, _database_error_text = _load_all_file_access_points(is_include_permission=False)
     for item in merged_list:
         item_id = str(item.get("fileAccessPointId") or "").strip()
         if not item_id:
@@ -264,11 +266,43 @@ def _find_file_access_point_by_name(file_access_point_name: str):
     normalized_name = str(file_access_point_name or "").strip()
     if not normalized_name:
         return None
-    merged_list, _database_error_text = _load_all_file_access_points()
+    merged_list, _database_error_text = _load_all_file_access_points(is_include_permission=False)
     for item in merged_list:
         if str(item.get("name") or "") == normalized_name:
             return item
     return None
+
+
+TARGET_FOLDER_FAP_RE = re.compile(r"^\[fap-smb-external:(.*)\(([^()]+)\)\](/.*)?$")
+
+
+def _parse_task_target_folder(raw_target_folder: Any, default_file_access_point: dict[str, Any] | None):
+    target_text = _to_text(raw_target_folder) or "/"
+    match = TARGET_FOLDER_FAP_RE.match(target_text)
+    if not match:
+        return {
+            "fileAccessPoint": default_file_access_point,
+            "folderPath": _normalize_path(target_text),
+            "targetFolderPath": target_text,
+        }
+    file_access_point_id = _to_text(match.group(2))
+    file_access_point = _find_file_access_point_by_id(file_access_point_id)
+    if file_access_point is None:
+        raise RuntimeError(f"smb/external file access point not found: {file_access_point_id}")
+    return {
+        "fileAccessPoint": file_access_point,
+        "folderPath": _normalize_path(match.group(3) or "/"),
+        "targetFolderPath": target_text,
+    }
+
+
+def _get_folder_path_from_file_path(path_value: Any):
+    normalized_path = _normalize_path(path_value)
+    if normalized_path == "/":
+        return "/"
+    part_list = [part for part in normalized_path.split("/") if part]
+    part_list.pop()
+    return f"/{'/'.join(part_list)}" if part_list else "/"
 
 
 def _get_request_user_id():
@@ -316,9 +350,34 @@ def _normalize_task_item_list(raw_item_list: Any):
 
 def _normalize_copy_move_operation_info(raw_operation_info: Any):
     operation_info = raw_operation_info if isinstance(raw_operation_info, dict) else {}
+    raw_item_list = operation_info.get("itemList")
+    item_list = _normalize_task_item_list(raw_item_list)
+    first_item = item_list[0]
+    default_target_fap = _get_task_item_fap(first_item, "fileAccessPointTarget") or _get_task_item_fap(first_item, "fileAccessPointSource")
+    target_folder_path_raw = operation_info.get("targetFolderPath")
+    if not _to_text(target_folder_path_raw):
+        target_folder_path_raw = _get_folder_path_from_file_path(first_item.get("pathTarget"))
+    target_info = _parse_task_target_folder(target_folder_path_raw, default_target_fap)
+    target_fap = target_info["fileAccessPoint"]
+    if target_fap is None:
+        raise RuntimeError("target file access point not found")
+    target_folder_path_resolved = target_info["folderPath"]
+    normalized_target_fap_info = {
+        "fileAccessPointType": "smb/external",
+        "fileAccessPointId": _to_text(target_fap.get("fileAccessPointId")),
+        "fileAccessPointName": _to_text(target_fap.get("name")),
+    }
+    for item_info in item_list:
+        item_name = _to_text(item_info.get("name"))
+        item_info["pathTarget"] = _join_path(target_folder_path_resolved, item_name)
+        item_info["fileAccessPointTarget"] = dict(normalized_target_fap_info)
     return {
-        "itemList": _normalize_task_item_list(operation_info.get("itemList")),
+        "targetFolderPath": target_info["targetFolderPath"],
+        "targetFolderPathResolved": target_folder_path_resolved,
+        "fileAccessPointTarget": normalized_target_fap_info,
+        "itemList": item_list,
         "isOverwriteAllowed": operation_info.get("isOverwriteAllowed") is True,
+        "isEnsureTargetFolder": operation_info.get("isEnsureTargetFolder") is not False,
     }
 
 
@@ -363,6 +422,8 @@ def _run_smb_external_copy_move_task(task_id: str, task_type: int):
     task_info = task.get("taskInfo") if isinstance(task.get("taskInfo"), dict) else {}
     operation_info = task_info.get("operationInfo") if isinstance(task_info.get("operationInfo"), dict) else {}
     item_list = operation_info.get("itemList") if isinstance(operation_info.get("itemList"), list) else []
+    target_folder_path = _normalize_path(operation_info.get("targetFolderPathResolved") or operation_info.get("targetFolderPath") or "/")
+    is_ensure_target_folder = operation_info.get("isEnsureTargetFolder") is not False
     item_count_done = 0
     item_count_fail = 0
     task_action_text = "copy" if task_type == TASK_TYPE_SMB_EXTERNAL_COPY else "move"
@@ -388,26 +449,51 @@ def _run_smb_external_copy_move_task(task_id: str, task_type: int):
                 fap_target = _get_task_item_fap(item_info, "fileAccessPointTarget")
                 if not fap_source or not fap_target:
                     raise RuntimeError("source or target file access point not found")
-                if fap_source.get("fileAccessPointId") != fap_target.get("fileAccessPointId"):
-                    raise RuntimeError("copy/move across different SMB external file access points is not supported yet")
                 if not fap_source.get("isMetadataValid"):
                     raise RuntimeError("source file access point metadata is invalid")
+                if not fap_target.get("isMetadataValid"):
+                    raise RuntimeError("target file access point metadata is invalid")
+                target_file_access_point_id = str(fap_target["fileAccessPointId"])
+                if is_ensure_target_folder:
+                    smb_connection_manager.ensure_dir(target_file_access_point_id, fap_target["metadata"], target_folder_path)
+                elif not smb_connection_manager.path_exists(target_file_access_point_id, fap_target["metadata"], target_folder_path):
+                    raise RuntimeError(f"target folder does not exist: {target_folder_path}")
                 path_source = _normalize_path(item_info.get("pathSource"))
                 path_target = _normalize_path(item_info.get("pathTarget"))
-                if task_type == TASK_TYPE_SMB_EXTERNAL_COPY:
+                is_same_file_access_point = fap_source.get("fileAccessPointId") == fap_target.get("fileAccessPointId")
+                if task_type == TASK_TYPE_SMB_EXTERNAL_COPY and is_same_file_access_point:
                     smb_connection_manager.copy_path(
                         str(fap_source["fileAccessPointId"]),
                         fap_source["metadata"],
                         path_source,
                         path_target,
                     )
-                else:
+                elif task_type == TASK_TYPE_SMB_EXTERNAL_COPY:
+                    smb_connection_manager.copy_path_between(
+                        str(fap_source["fileAccessPointId"]),
+                        fap_source["metadata"],
+                        target_file_access_point_id,
+                        fap_target["metadata"],
+                        path_source,
+                        path_target,
+                    )
+                elif is_same_file_access_point:
                     smb_connection_manager.move_path(
                         str(fap_source["fileAccessPointId"]),
                         fap_source["metadata"],
                         path_source,
                         path_target,
                     )
+                else:
+                    smb_connection_manager.copy_path_between(
+                        str(fap_source["fileAccessPointId"]),
+                        fap_source["metadata"],
+                        target_file_access_point_id,
+                        fap_target["metadata"],
+                        path_source,
+                        path_target,
+                    )
+                    smb_connection_manager.remove_path(str(fap_source["fileAccessPointId"]), fap_source["metadata"], path_source)
                 item_count_done += 1
                 item_info["taskStatus"] = TASK_STATUS_SUCCESS
                 item_info["taskStatusText"] = "success"
@@ -452,6 +538,19 @@ def _run_smb_external_copy_move_task(task_id: str, task_type: int):
         )
     except Exception as error:
         update_task_progress(task_id, TASK_STATUS_FAIL, str(error), operation_info=operation_info)
+
+
+def _submit_smb_external_copy_move_task(task_type: int, user_id: str, raw_operation_info: Any):
+    operation_info = _normalize_copy_move_operation_info(raw_operation_info)
+    task_action_text = "copy" if task_type == TASK_TYPE_SMB_EXTERNAL_COPY else "move"
+    task = insert_task(task_type, user_id, operation_info, f"{task_action_text} submitted")
+    thread = threading.Thread(
+        target=_run_smb_external_copy_move_task,
+        args=(task["taskId"], task_type),
+        daemon=True,
+    )
+    thread.start()
+    return task
 
 
 def register_fap_smb_external_routes(app, sock, make_json_response, validate_auth_token):
@@ -506,16 +605,31 @@ def register_fap_smb_external_routes(app, sock, make_json_response, validate_aut
         if task_type not in (TASK_TYPE_SMB_EXTERNAL_COPY, TASK_TYPE_SMB_EXTERNAL_MOVE):
             return make_json_response(-1, message=f"unsupported taskType: {task_type}"), 400
         try:
-            operation_info = _normalize_copy_move_operation_info(body.get("operationInfo"))
             user_id = _get_request_user_id()
-            task_action_text = "copy" if task_type == TASK_TYPE_SMB_EXTERNAL_COPY else "move"
-            task = insert_task(task_type, user_id, operation_info, f"{task_action_text} submitted")
-            thread = threading.Thread(
-                target=_run_smb_external_copy_move_task,
-                args=(task["taskId"], task_type),
-                daemon=True,
-            )
-            thread.start()
+            task = _submit_smb_external_copy_move_task(task_type, user_id, body.get("operationInfo"))
+            return make_json_response(0, data={"task": task, "taskId": task["taskId"]})
+        except Exception as error:
+            return make_json_response(-1, message=str(error)), 400
+
+    @app.post("/fap-smb-external/task/resubmit")
+    def fap_smb_external_task_resubmit():
+        if not has_request_permission("W"):
+            return make_json_response(-1, message="write permission required"), 403
+        body = request.get_json(silent=True) or {}
+        task_id = _to_text(body.get("taskId"))
+        user_id = _get_request_user_id()
+        old_task = get_task(task_id, user_id)
+        if old_task is None:
+            return make_json_response(-1, message=f"task not found: {task_id}"), 404
+        task_type = int(old_task.get("taskType") or 0)
+        if task_type not in (TASK_TYPE_SMB_EXTERNAL_COPY, TASK_TYPE_SMB_EXTERNAL_MOVE):
+            return make_json_response(-1, message=f"unsupported taskType: {task_type}"), 400
+        if int(old_task.get("taskStatus") or 0) != TASK_STATUS_FAIL:
+            return make_json_response(-1, message="only failed tasks can be resubmitted"), 400
+        task_info = old_task.get("taskInfo") if isinstance(old_task.get("taskInfo"), dict) else {}
+        operation_info = task_info.get("operationInfo") if isinstance(task_info.get("operationInfo"), dict) else {}
+        try:
+            task = _submit_smb_external_copy_move_task(task_type, user_id, operation_info)
             return make_json_response(0, data={"task": task, "taskId": task["taskId"]})
         except Exception as error:
             return make_json_response(-1, message=str(error)), 400

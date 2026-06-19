@@ -18,6 +18,12 @@ config_databases:
     username: postgres
     password: postgres
 
+task_status_display_name:
+  1: running
+  2: success
+  3: fail
+  4: cancel
+
 file_access_point_smb_external:
   nas:
     host: 192.168.0.7

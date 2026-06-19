@@ -22,6 +22,7 @@ File access point:
 - `POST /api/fap-smb-external/task/list`
 - `POST /api/fap-smb-external/task/get`
 - `POST /api/fap-smb-external/task/status`
+- `POST /api/fap-smb-external/task/resubmit`
 - `POST /api/fap-smb-external/task/cancel`
 - `POST /api/fap-smb-external/task/delete`
 - `POST /api/fap-smb-external/task/asset/list`
@@ -70,12 +71,17 @@ Task notes:
 - `task/submit` starts a task and returns `taskId`
 - `task/list` returns task rows including latest `taskStatus` and `taskStatusText`
 - `task/status` returns `taskStatus` and `taskStatusText`
+- `task/resubmit` creates a new copy or move task from a failed task's saved operation data
 - `task/get` returns the full `taskInfo`
 - `task/cancel` marks an undergoing task as cancel when the task type supports cancellation
 - `task/delete` deletes a non-undergoing task log and its related assets
 - `task/asset/list` returns assets listed in `taskInfo.assetInfo.assetById`
 - `task/asset/get` downloads one asset by `assetId`
+- `taskStatus` is the integer source of truth; `taskStatusText` is a short display name such as `running`, `success`, `fail`, or `cancel`
+- detailed task messages are stored in `taskInfo.taskProgress.progressList` and `taskInfo.exitInfo`
 - task websocket support should notify frontend when `taskStatus` or `taskStatusText` changes
+- copy/move `operationInfo.targetFolderPath` can be a plain path such as `/target` for the same SMB external file access point, or `[fap-smb-external:name(id)]/target` for another SMB external file access point
+- copy/move `operationInfo.isEnsureTargetFolder` defaults to `true`; when `false`, each entry fails independently if the task target folder is missing
 
 SMB internal notes:
 

@@ -58,7 +58,7 @@ The table stores task state, task input, progress summary, and final result or e
 
 `userId` records the task submitter. The first implementation can use the login username as `userId`.
 
-`taskStatusText` stores the latest short status message. It mirrors the latest entry in `taskInfo.taskProgress.progressList` so the UI, PostgreSQL trigger, and websocket layer can display task changes without parsing the full JSON.
+`taskStatusText` stores a short display name for `taskStatus`, for example `running`, `success`, `fail`, or `cancel`. Detailed progress and failure messages are stored in `taskInfo.taskProgress.progressList` and `taskInfo.exitInfo`.
 
 All timezone columns store UTC offset in minutes. API display should use the project time format such as `20260520_23250530+09`.
 
@@ -103,12 +103,19 @@ Status rules:
     "taskType": 3,
     "taskTypeName": "smbExternalCopy",
     "taskStatus": 1,
-    "taskStatusText": "copy waiting"
+    "taskStatusText": "running"
   },
   "userInfo": {
     "userId": "example"
   },
   "operationInfo": {
+    "targetFolderPath": "[fap-smb-external:nas(config:nas)]/target",
+    "targetFolderPathResolved": "/target",
+    "fileAccessPointTarget": {
+      "fileAccessPointType": "smb/external",
+      "fileAccessPointId": "config:nas",
+      "fileAccessPointName": "nas"
+    },
     "itemList": [
       {
         "name": "example.txt",
@@ -128,7 +135,8 @@ Status rules:
         "sizeBytes": 123
       }
     ],
-    "isOverwriteAllowed": false
+    "isOverwriteAllowed": false,
+    "isEnsureTargetFolder": true
   },
   "taskProgress": {
     "itemCountTotal": 1,
@@ -138,7 +146,7 @@ Status rules:
     "progressList": [
       {
         "taskStatus": 1,
-        "taskStatusMessage": "copy waiting",
+        "taskStatusMessage": "copy submitted",
         "updateAt": "20260606_00350000+09",
         "updateAtTimezone": 540
       }
@@ -167,7 +175,7 @@ Optional top-level fields:
 - `taskType`: same integer as table `taskType`
 - `taskTypeName`: stable string for debugging and UI labels
 - `taskStatus`: latest task status, same integer as table `taskStatus`
-- `taskStatusText`: latest short status message, same text as table `taskStatusText`
+- `taskStatusText`: short display name for the integer `taskStatus`
 
 `operationInfo` is task dependent. Fields that are common for one task type do not need to be forced into every other task type.
 
@@ -193,7 +201,17 @@ For copy and move tasks, `operationInfo.itemList` entries should use this shape:
 }
 ```
 
-`fileAccessPointSource` and `fileAccessPointTarget` are stored per entry. A first implementation can require source and target to be inside the same SMB external file access point, but the task format allows a later task to include entries with different source or target file access points.
+`fileAccessPointSource` and `fileAccessPointTarget` are stored per entry. A copy or move task has one target folder and one target SMB external file access point, so every entry target should be derived from `operationInfo.targetFolderPathResolved` plus the entry `name`.
+
+`operationInfo.targetFolderPath` is the user-facing target string. A plain path such as `/aaa/bbb` means the same SMB external file access point as the source. A cross-access-point target uses this form:
+
+```text
+[fap-smb-external:nas(config:nas)]/aaa/bbb
+```
+
+The display name before the parentheses is informational. The id inside the parentheses is authoritative and must resolve to an existing SMB external file access point.
+
+`operationInfo.isEnsureTargetFolder` controls missing target folder behavior. It defaults to `true` for compatibility with older task records. When `true`, the backend creates missing folders in the task target path before each entry operation. When `false`, the backend fails the current entry if the target folder does not exist. Each entry keeps its own `taskStatus` and `taskStatusText`; the overall task fails if one or more entries fail.
 
 Entry fields should not use an unnecessary `item` prefix. Use `name`, `path`, `pathSource`, `pathTarget`, and similar names.
 
@@ -219,12 +237,14 @@ Each entry can include:
 
 `updateAt` uses the project display format, for example `20260606_00350000+09`. `updateAtTimezone` stores UTC offset in minutes, for example `540` for Japan time.
 
-The latest progress entry is mirrored to the table columns:
+The latest task status is mirrored to the table columns:
 
 - `taskStatus`
 - `taskStatusText`
 - `updatedAt`
 - `updatedAtTimeZone`
+
+`taskStatusText` should stay short. Its display names can be configured in `config/config.yaml` under `task_status_display_name`.
 
 `resultInfo` is `null` while the task is undergoing. On success, it should be an object containing the final result summary, for example copied item count, moved item count, zip download name, or uploaded file names.
 
@@ -320,23 +340,25 @@ The asset file name is only for backend lookup. The user-facing download name sh
 
 ## SMB External Copy And Move
 
-Copy and move tasks operate inside one SMB external file access point.
+Copy and move tasks operate on SMB external file access points. The source and target can be the same access point or different SMB external access points.
 
 Copy task behavior:
 
 - create task row with per-entry source and target information
-- copy each selected file or folder inside the same SMB external access point
+- copy each selected file or folder to the task target folder
 - update item and byte progress when known
 - mark success after all selected items are copied
 - mark fail if any required source is missing or SMB operation fails
 - mark cancel if user cancels before completion
+- keep each entry status independent, even when the overall task later fails
 
 Move task behavior:
 
 - same task model as copy
 - prefer SMB rename for same-folder or same-share moves when possible
-- fall back to copy then delete only when rename is not suitable
+- fall back to copy then delete for moves across SMB external file access points
 - mark fail if delete fails after copy, and record clear `exitInfo.exitMessage`
+- use one task target folder; recursive child paths are relative to that target folder
 
 ## Backend API Design
 
@@ -346,6 +368,7 @@ SMB external task endpoints:
 - `POST /api/fap-smb-external/task/list`
 - `POST /api/fap-smb-external/task/get`
 - `POST /api/fap-smb-external/task/status`
+- `POST /api/fap-smb-external/task/resubmit`
 - `POST /api/fap-smb-external/task/cancel`
 - `POST /api/fap-smb-external/task/delete`
 - `POST /api/fap-smb-external/task/asset/list`
@@ -362,6 +385,7 @@ Endpoint behavior:
 - `task/submit`: submit a new task and return `taskId`
 - `task/list`: return task rows including latest `taskStatus` and `taskStatusText`
 - `task/status`: return `taskStatus` and `taskStatusText`
+- `task/resubmit`: create a new copy or move task from a failed task's saved operation data
 - `task/get`: return full `taskInfo`
 - `task/cancel`: cancel an undergoing task when the task type supports cancellation
 - `task/delete`: delete a non-undergoing task log and its related assets
@@ -376,6 +400,8 @@ Example copy submit body:
 {
   "taskType": 3,
   "operationInfo": {
+    "targetFolderPath": "/target",
+    "isEnsureTargetFolder": true,
     "itemList": [
       {
         "name": "example.txt",

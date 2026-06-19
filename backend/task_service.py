@@ -1,15 +1,25 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import string
+import sys
 import time
 from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from psycopg.rows import dict_row
 
+_CURRENT_DIR = Path(__file__).resolve().parent
+_DIR_BASE = Path(os.environ.get("DIR_BASE", str(_CURRENT_DIR.parent))).resolve()
+_CONFIG_DIR = _DIR_BASE / "config"
+if str(_CONFIG_DIR) not in sys.path:
+    sys.path.insert(0, str(_CONFIG_DIR))
+
+from config_loader import load_project_config
 from db import run_in_transaction
 
 TASK_STATUS_UNDERGOING = 1
@@ -29,11 +39,35 @@ TASK_TYPE_NAME_BY_TYPE = {
     TASK_TYPE_SMB_EXTERNAL_MOVE: "smbExternalMove",
 }
 
+TASK_STATUS_DISPLAY_NAME_DEFAULT = {
+    TASK_STATUS_UNDERGOING: "running",
+    TASK_STATUS_SUCCESS: "success",
+    TASK_STATUS_FAIL: "fail",
+    TASK_STATUS_CANCEL: "cancel",
+}
+
 BASE36_ALPHABET = string.digits + string.ascii_lowercase
 
 
 def _to_text(value: Any):
     return str(value or "").strip()
+
+
+def get_task_status_display_name(task_status: int):
+    task_status_int = int(task_status or 0)
+    try:
+        project_config = load_project_config(_DIR_BASE)
+    except Exception:
+        project_config = {}
+    display_name_config = project_config.get("task_status_display_name")
+    if isinstance(display_name_config, dict):
+        configured_value = display_name_config.get(task_status_int)
+        if configured_value is None:
+            configured_value = display_name_config.get(str(task_status_int))
+        configured_text = _to_text(configured_value)
+        if configured_text:
+            return configured_text
+    return TASK_STATUS_DISPLAY_NAME_DEFAULT.get(task_status_int, "unknown")
 
 
 def create_task_id_int():
@@ -98,13 +132,14 @@ def build_task_info(
     user_id: str,
     operation_info: dict[str, Any],
 ):
+    task_status_display_name = get_task_status_display_name(task_status)
     return {
         "schemaVersion": 1,
         "taskBaseInfo": {
             "taskType": int(task_type),
             "taskTypeName": TASK_TYPE_NAME_BY_TYPE.get(int(task_type), "unknown"),
             "taskStatus": int(task_status),
-            "taskStatusText": _to_text(task_status_text),
+            "taskStatusText": task_status_display_name,
         },
         "userInfo": {
             "userId": _to_text(user_id),
@@ -147,6 +182,7 @@ def insert_task(task_type: int, user_id: str, operation_info: dict[str, Any], ta
     task_id = create_task_id_int()
     timezone_offset = get_timezone_offset_minutes()
     task_info = build_task_info(task_type, TASK_STATUS_UNDERGOING, task_status_text, user_id, operation_info)
+    task_status_display_name = get_task_status_display_name(TASK_STATUS_UNDERGOING)
 
     def action(db):
         with closing(db.cursor(row_factory=dict_row)) as cursor:
@@ -172,7 +208,7 @@ def insert_task(task_type: int, user_id: str, operation_info: dict[str, Any], ta
                     _to_text(user_id),
                     int(task_type),
                     TASK_STATUS_UNDERGOING,
-                    _to_text(task_status_text),
+                    task_status_display_name,
                     json.dumps(task_info),
                     timezone_offset,
                     timezone_offset,
@@ -236,6 +272,7 @@ def update_task_progress(
     task_id = task_id_from_text(task_id_text)
     timezone_offset = get_timezone_offset_minutes()
     progress_item = make_progress_item(task_status, task_status_text)
+    task_status_display_name = get_task_status_display_name(task_status)
 
     def action(db):
         with closing(db.cursor(row_factory=dict_row)) as cursor:
@@ -246,7 +283,7 @@ def update_task_progress(
             task_info = row["taskinfo"] if isinstance(row["taskinfo"], dict) else {}
             task_base_info = task_info.get("taskBaseInfo") if isinstance(task_info.get("taskBaseInfo"), dict) else {}
             task_base_info["taskStatus"] = int(task_status)
-            task_base_info["taskStatusText"] = _to_text(task_status_text)
+            task_base_info["taskStatusText"] = task_status_display_name
             task_info["taskBaseInfo"] = task_base_info
             if operation_info is not None:
                 task_info["operationInfo"] = operation_info
@@ -280,7 +317,7 @@ def update_task_progress(
                 """,
                 (
                     int(task_status),
-                    _to_text(task_status_text),
+                    task_status_display_name,
                     json.dumps(task_info),
                     timezone_offset,
                     is_terminal,
@@ -298,6 +335,7 @@ def set_task_result(task_id_text: Any, task_status_text: str, result_info: dict[
     task_id = task_id_from_text(task_id_text)
     timezone_offset = get_timezone_offset_minutes()
     progress_item = make_progress_item(TASK_STATUS_SUCCESS, task_status_text)
+    task_status_display_name = get_task_status_display_name(TASK_STATUS_SUCCESS)
 
     def action(db):
         with closing(db.cursor(row_factory=dict_row)) as cursor:
@@ -308,7 +346,7 @@ def set_task_result(task_id_text: Any, task_status_text: str, result_info: dict[
             task_info = row["taskinfo"] if isinstance(row["taskinfo"], dict) else {}
             task_base_info = task_info.get("taskBaseInfo") if isinstance(task_info.get("taskBaseInfo"), dict) else {}
             task_base_info["taskStatus"] = TASK_STATUS_SUCCESS
-            task_base_info["taskStatusText"] = _to_text(task_status_text)
+            task_base_info["taskStatusText"] = task_status_display_name
             task_info["taskBaseInfo"] = task_base_info
             task_progress = task_info.get("taskProgress") if isinstance(task_info.get("taskProgress"), dict) else {}
             if progress_patch:
@@ -333,7 +371,7 @@ def set_task_result(task_id_text: Any, task_status_text: str, result_info: dict[
                 """,
                 (
                     TASK_STATUS_SUCCESS,
-                    _to_text(task_status_text),
+                    task_status_display_name,
                     json.dumps(task_info),
                     timezone_offset,
                     timezone_offset,
