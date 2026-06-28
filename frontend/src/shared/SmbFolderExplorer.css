@@ -1,0 +1,89 @@
+.smb-folder-explorer-root {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.smb-folder-explorer-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.smb-folder-explorer-message {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  padding: 3px 5px;
+  background: #fafafa;
+  font-size: 12px;
+}
+
+.smb-folder-explorer-message.status-success {
+  border-color: #cde8d2;
+  background: #f4fbf5;
+}
+
+.smb-folder-explorer-message.status-error {
+  border-color: #efc8c8;
+  background: #fff5f5;
+}
+
+.smb-folder-explorer-message.status-loading {
+  border-color: #d5def5;
+  background: #f6f8ff;
+}
+
+.smb-folder-explorer-message.status-empty {
+  color: #888;
+}
+
+.smb-folder-explorer-message-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smb-folder-explorer-message .smb-folder-explorer-btn {
+  flex-shrink: 0;
+}
+
+.smb-folder-explorer-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: stretch;
+}
+
+.smb-folder-explorer-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.smb-folder-explorer-btn {
+  min-height: 24px;
+  border: 1px solid #d2d2d2;
+  border-radius: 2px;
+  background: #fff;
+  padding: 2px 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.smb-folder-explorer-btn:disabled {
+  cursor: default;
+  color: #999;
+  background: #f6f6f6;
+}
+
+.smb-folder-explorer-table {
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  overflow: hidden;
+}

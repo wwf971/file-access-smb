@@ -1,4 +1,4 @@
-import { resolveApiUrl, withAuthQuery } from './publicPath'
+import { resolveApiUrl } from './publicPath'
 import { authStore } from './src/store/authStore'
 
 type ApiResponse<T = Record<string, unknown>> = {
@@ -8,15 +8,6 @@ type ApiResponse<T = Record<string, unknown>> = {
 }
 
 const FETCH_CREDENTIALS: RequestCredentials = 'include'
-
-const buildAuthHeaders = (extraHeaders: HeadersInit = {}) => {
-  const token = authStore.token
-  return {
-    ...authStore.getAuthHeaders(),
-    ...(token ? { 'X-Auth-Token': token } : {}),
-    ...extraHeaders,
-  }
-}
 
 const withNoCacheQuery = (url: string, options: RequestInit = {}) => {
   const method = `${options.method ?? 'GET'}`.toUpperCase()
@@ -49,24 +40,49 @@ const parseErrorMessage = (responseText: string) => {
   }
 }
 
+const parseJsonBody = (body: BodyInit | null | undefined) => {
+  if (typeof body !== 'string' || !body.trim()) {
+    return {}
+  }
+  try {
+    const data = JSON.parse(body) as unknown
+    return data && typeof data === 'object' && !Array.isArray(data) ? data as Record<string, unknown> : {}
+  } catch {
+    return {}
+  }
+}
+
+const buildOptionsWithAuthBody = (options: RequestInit, token: string) => {
+  const method = `${options.method ?? 'GET'}`.toUpperCase()
+  if (!token || method === 'GET' || method === 'HEAD') {
+    return options
+  }
+  const body = parseJsonBody(options.body)
+  return {
+    ...options,
+    body: JSON.stringify({ ...body, authToken: token }),
+  }
+}
+
 export async function requestAuthenticatedJson(
   path: string,
   options: RequestInit = {},
 ) {
-  const token = authStore.token
-  const baseUrl = withAuthQuery(resolveApiUrl(path), token)
-  const url = withNoCacheQuery(baseUrl, options)
-  const extraHeaders = options.headers || {}
+  const token = await authStore.getServiceToken()
+  const optionsWithAuthBody = buildOptionsWithAuthBody(options, token)
+  const baseUrl = resolveApiUrl(path)
+  const url = withNoCacheQuery(baseUrl, optionsWithAuthBody)
+  const extraHeaders = optionsWithAuthBody.headers || {}
   const response = await fetch(url, {
+    ...optionsWithAuthBody,
     credentials: FETCH_CREDENTIALS,
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, max-age=0',
       Pragma: 'no-cache',
-      ...buildAuthHeaders(extraHeaders),
+      ...extraHeaders,
     },
-    ...options,
   })
   const body = await parseJsonResponse(response)
   if (response.status === 401) {
@@ -80,19 +96,20 @@ export async function requestAuthenticatedJson(
 }
 
 export async function requestAuthenticatedBlob(path: string, options: RequestInit = {}) {
-  const token = authStore.token
-  const baseUrl = withAuthQuery(resolveApiUrl(path), token)
-  const url = withNoCacheQuery(baseUrl, options)
-  const extraHeaders = options.headers || {}
+  const token = await authStore.getServiceToken()
+  const optionsWithAuthBody = buildOptionsWithAuthBody(options, token)
+  const baseUrl = resolveApiUrl(path)
+  const url = withNoCacheQuery(baseUrl, optionsWithAuthBody)
+  const extraHeaders = optionsWithAuthBody.headers || {}
   const response = await fetch(url, {
+    ...optionsWithAuthBody,
     credentials: FETCH_CREDENTIALS,
     cache: 'no-store',
     headers: {
       'Cache-Control': 'no-cache, no-store, max-age=0',
       Pragma: 'no-cache',
-      ...buildAuthHeaders(extraHeaders),
+      ...extraHeaders,
     },
-    ...options,
   })
   if (response.status === 401) {
     authStore.clearSessionOnUnauthorized()

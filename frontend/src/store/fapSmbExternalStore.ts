@@ -2,6 +2,10 @@ import { makeAutoObservable, runInAction } from 'mobx'
 import { resolveApiUrl, withAuthQuery } from '../../publicPath'
 import { requestAuthenticatedJson, requestAuthenticatedBlob } from '../../apiRequest'
 import { authStore } from './authStore'
+import {
+  createSmbFolderExplorerState,
+  type SmbFolderExplorerMessageState,
+} from '@wwf971/file-access-smb'
 
 export type FapSmbExternalItem = {
   fileAccessPointId: string
@@ -183,14 +187,8 @@ export class FapSmbExternalStore {
 
   createExploreState(): ExploreState {
     return {
+      ...createSmbFolderExplorerState('/'),
       path: '/',
-      items: [],
-      rowsSelectedId: [],
-      messageState: {
-        status: 'idle',
-        messageText: '',
-      },
-      isExploring: false,
       editingRowId: null,
       editingName: '',
       renamingRowId: null,
@@ -221,6 +219,26 @@ export class FapSmbExternalStore {
   setExploreMessageState(fileAccessPointId: string, messageState: ExploreMessageState) {
     const state = this.getExploreState(fileAccessPointId)
     state.messageState = messageState
+  }
+
+  getSmbFolderExplorerState(fileAccessPointId: string) {
+    return this.getExploreState(fileAccessPointId)
+  }
+
+  setSmbFolderExplorerPath(fileAccessPointId: string, path: string) {
+    this.setExplorePath(fileAccessPointId, path)
+  }
+
+  setSmbFolderExplorerSelectedRowIds(fileAccessPointId: string, rowIds: string[]) {
+    this.setExploreSelectedRowIds(fileAccessPointId, rowIds)
+  }
+
+  setSmbFolderExplorerMessageState(fileAccessPointId: string, messageState: SmbFolderExplorerMessageState) {
+    this.setExploreMessageState(fileAccessPointId, messageState as ExploreMessageState)
+  }
+
+  async requestSmbFolderExplorerList(fileAccessPointId: string, path: string) {
+    return this.requestExplore(fileAccessPointId, path)
   }
 
   setExploreEditingRow(fileAccessPointId: string, rowId: string | null, editingName = '') {
@@ -443,19 +461,19 @@ export class FapSmbExternalStore {
     }
   }
 
-  requestUploadOneFile(task: UploadTaskState, uploadItem: UploadFileItem, uploadName: string) {
+  async requestUploadOneFile(task: UploadTaskState, uploadItem: UploadFileItem, uploadName: string) {
     const formData = new FormData()
     formData.append('fileAccessPointId', task.fileAccessPointId)
     formData.append('path', task.folderPath)
     formData.append('uploadName', uploadName)
     formData.append('file', uploadItem.file, uploadItem.fileName)
-    const authToken = String(authStore.token || '')
+    const authToken = String(await authStore.getServiceToken() || '')
     const url = withAuthQuery(resolveApiUrl('/fap-smb-external/explore/upload'), authToken)
     return new Promise<Record<string, unknown>>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', url)
       xhr.withCredentials = true
-      const authHeaders = authStore.getAuthHeaders() as Record<string, string>
+      const authHeaders = authStore.getAuthHeadersForToken(authToken) as Record<string, string>
       Object.entries(authHeaders).forEach(([key, value]) => {
         xhr.setRequestHeader(key, value)
       })
@@ -518,6 +536,11 @@ export class FapSmbExternalStore {
     this.isTextEditorDecodeLossy = false
   }
 
+  dismissTextEditorMessage() {
+    this.textEditorErrorText = ''
+    this.textEditorStatusText = ''
+  }
+
   toggleMarkdownPreview() {
     this.isMarkdownPreviewVisible = !this.isMarkdownPreviewVisible
   }
@@ -536,7 +559,7 @@ export class FapSmbExternalStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/fap-smb-external/list')
+      const data = await requestAuthenticatedJson('/fap-smb-external/list', { method: 'POST', body: JSON.stringify({}) })
       const items = Array.isArray(data.items) ? (data.items as FapSmbExternalItem[]) : []
       runInAction(() => {
         this.items = items
@@ -732,7 +755,6 @@ export class FapSmbExternalStore {
     }
     runInAction(() => {
       state.isExploring = true
-      state.path = path
     })
     try {
       const data = await requestAuthenticatedJson('/fap-smb-external/explore/list', {
@@ -745,6 +767,7 @@ export class FapSmbExternalStore {
       const items = Array.isArray(data.items) ? (data.items as ExploreItem[]) : []
       runInAction(() => {
         const exploreState = this.getExploreState(normalizedFileAccessPointId)
+        exploreState.path = path
         exploreState.items = items
         const existingRowIdSet = new Set(items.map((exploreItem) => `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`))
         exploreState.rowsSelectedId = exploreState.rowsSelectedId.filter((rowId) => existingRowIdSet.has(rowId))
@@ -760,7 +783,6 @@ export class FapSmbExternalStore {
     } catch (error: unknown) {
       runInAction(() => {
         this.errorText = String(error)
-        this.getExploreState(normalizedFileAccessPointId).items = []
       })
       return { isSuccess: false, messageText: String(error) }
     } finally {
@@ -1095,11 +1117,11 @@ export class FapSmbExternalStore {
     URL.revokeObjectURL(downloadUrl)
   }
 
-  connectZipWebSocket(taskId: string) {
+  async connectZipWebSocket(taskId: string) {
     this.closeZipWebSocket()
     this.stopZipStatusPolling()
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const authToken = String(authStore.token || '')
+    const authToken = String(await authStore.getServiceToken() || '')
     const wsUrl = `${protocol}//${window.location.host}${withAuthQuery(
       resolveApiUrl(`/fap-smb-external/zip/ws/${encodeURIComponent(taskId)}`),
       authToken,
@@ -1199,7 +1221,7 @@ export class FapSmbExternalStore {
       runInAction(() => {
         this.zipTaskId = taskId
       })
-      this.connectZipWebSocket(taskId)
+      await this.connectZipWebSocket(taskId)
       return { isSuccess: true, messageText: 'zip started' }
     } catch (error: unknown) {
       runInAction(() => {

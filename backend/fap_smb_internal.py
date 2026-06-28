@@ -552,6 +552,7 @@ def _delete_internal_fap(file_access_point_id: str):
 
 def register_fap_smb_internal_routes(app, make_json_response):
     @app.get("/fap-smb-internal/list")
+    @app.post("/fap-smb-internal/list")
     def smb_internal_file_access_point_list():
         if not has_request_permission("R"):
             return make_json_response(-1, message="read permission required"), 403

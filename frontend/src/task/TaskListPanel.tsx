@@ -25,7 +25,6 @@ const TASK_LIST_COLUMNS_SIZE = {
 }
 
 const TaskListPanel = observer(() => {
-  const FolderViewComp = FolderView as any
   const viewState = taskStore.getTaskListViewState(TASK_LIST_VIEW_KEY)
   const selectedTask = taskStore.getSelectedTaskForView(TASK_LIST_VIEW_KEY)
   const isSelectedUndergoing = selectedTask?.taskStatus === TASK_STATUS.undergoing
@@ -115,23 +114,38 @@ const TaskListPanel = observer(() => {
         </button>
       </div>
       {taskStore.errorText ? <div className="error-box">{taskStore.errorText}</div> : null}
-      <FolderViewComp
-        columns={TASK_LIST_COLUMNS}
-        columnsOrder={TASK_LIST_COLUMNS_ORDER}
-        columnsSizeInit={TASK_LIST_COLUMNS_SIZE}
-        rows={rows}
-        bodyHeight={420}
-        showStatusBar={true}
-        listOnly={true}
-        selectionMode="single"
-        selectedRowIds={viewState.selectedTaskIds}
-        onSelectedRowIdsChange={(taskIds: string[]) => {
-          taskStore.setTaskListSelectedTaskIds(TASK_LIST_VIEW_KEY, taskIds)
+      <FolderView
+        data={{
+          columns: TASK_LIST_COLUMNS,
+          colsOrder: TASK_LIST_COLUMNS_ORDER,
+          rows,
+          rowIdsSelected: viewState.selectedTaskIds,
+          statusBar: {
+            itemCount: rows.length,
+            messageState: taskStore.isListLoading
+              ? { status: 'loading', messageText: 'loading tasks' }
+              : null,
+          },
         }}
-        loading={taskStore.isListLoading}
-        showStatusItemCount={true}
-        onRowDoubleClick={(taskId: string) => {
-          taskStore.selectTask(taskId)
+        config={{
+          colSizeById: TASK_LIST_COLUMNS_SIZE,
+          bodyHeight: 420,
+          isListOnly: true,
+          isStatusBarVisible: true,
+          isStatusItemCountVisible: true,
+          selectionMode: 'single',
+          isLocked: taskStore.isListLoading,
+        }}
+        onEvent={async (eventType, eventData) => {
+          if (eventType === 'rowIdsSelectedChange') {
+            taskStore.setTaskListSelectedTaskIds(TASK_LIST_VIEW_KEY, eventData.rowIdsSelected as string[])
+            return { code: 0 }
+          }
+          if (eventType === 'rowDoubleClick') {
+            taskStore.selectTask(String(eventData.rowId || ''))
+            return { code: 0 }
+          }
+          return { code: 0 }
         }}
       />
     </div>

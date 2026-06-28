@@ -28,7 +28,7 @@ class AppStore {
   }
 
   async bootstrap() {
-    await requestAuthenticatedJson('/login/check')
+    await requestAuthenticatedJson('/login/check', { method: 'POST', body: JSON.stringify({}) })
     await Promise.all([serviceStore.requestPing(), serviceStore.requestDatabaseInfo()])
     await Promise.all([
       fapSmbExternalStore.requestLoadList(),

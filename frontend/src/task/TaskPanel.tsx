@@ -19,7 +19,6 @@ const TASK_ITEM_COLUMNS_SIZE = {
 }
 
 const TaskPanel = observer(() => {
-  const FolderViewComp = FolderView as any
   const task = taskStore.taskSelected
   if (!taskStore.isPanelOpen || !task) {
     return null
@@ -75,18 +74,25 @@ const TaskPanel = observer(() => {
           <span>updated {task.updatedAt}</span>
         </div>
         <div className="task-panel-table-wrap">
-          <FolderViewComp
-            columns={TASK_ITEM_COLUMNS}
-            columnsOrder={TASK_ITEM_COLUMNS_ORDER}
-            columnsSizeInit={TASK_ITEM_COLUMNS_SIZE}
-            rows={rows}
-            bodyHeight={260}
-            showStatusBar={true}
-            listOnly={true}
-            selectionMode="none"
-            rowsSelectedId={[]}
-            loading={false}
-            showStatusItemCount={true}
+          <FolderView
+            data={{
+              columns: TASK_ITEM_COLUMNS,
+              colsOrder: TASK_ITEM_COLUMNS_ORDER,
+              rows,
+              rowIdsSelected: [],
+              statusBar: {
+                itemCount: rows.length,
+                messageState: null,
+              },
+            }}
+            config={{
+              colSizeById: TASK_ITEM_COLUMNS_SIZE,
+              bodyHeight: 260,
+              isListOnly: true,
+              isStatusBarVisible: true,
+              isStatusItemCountVisible: true,
+              selectionMode: 'none',
+            }}
           />
         </div>
         <div className="task-panel-bottom-row">

@@ -21,7 +21,6 @@ const FapSmbExternalDirSelector = ({
   isDisabled,
   onExplore,
 }: FapSmbExternalDirSelectorProps) => {
-  const FolderViewComp = FolderView as any
   const normalizedFolderPath = normalizePath(folderPath)
   const parentPath = buildParentPath(normalizedFolderPath)
   const rows = items
@@ -59,21 +58,35 @@ const FapSmbExternalDirSelector = ({
           {normalizedFolderPath}
         </div>
       </div>
-      <FolderViewComp
-        columns={{ name: { data: 'name', align: 'left' } }}
-        columnsOrder={['name']}
-        columnsSizeInit={{ name: { width: 300, minWidth: 160, resizable: true } }}
-        rows={rows}
-        bodyHeight={170}
-        showStatusBar={true}
-        listOnly={true}
-        selectionMode="none"
-        rowsSelectedId={[]}
-        loading={isLoading}
-        showStatusItemCount={true}
-        onRowDoubleClick={(rowId: string) => {
-          const name = String(rowId || '').replace(/^d:/, '')
-          onExplore(joinPath(normalizedFolderPath, name))
+      <FolderView
+        data={{
+          columns: { name: { data: 'name', align: 'left' } },
+          colsOrder: ['name'],
+          rows,
+          rowIdsSelected: [],
+          statusBar: {
+            itemCount: rows.length,
+            messageState: isLoading
+              ? { status: 'loading', messageText: 'loading directories' }
+              : null,
+          },
+        }}
+        config={{
+          colSizeById: { name: { width: 300, minWidth: 160, resizable: true } },
+          bodyHeight: 170,
+          isListOnly: true,
+          isStatusBarVisible: true,
+          isStatusItemCountVisible: true,
+          selectionMode: 'none',
+          isLocked: isDisabled || isLoading,
+        }}
+        onEvent={async (eventType, eventData) => {
+          if (eventType === 'rowDoubleClick') {
+            const name = String(eventData.rowId || '').replace(/^d:/, '')
+            onExplore(joinPath(normalizedFolderPath, name))
+            return { code: 0 }
+          }
+          return { code: 0 }
         }}
       />
     </div>

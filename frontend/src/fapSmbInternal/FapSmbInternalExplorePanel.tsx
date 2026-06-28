@@ -452,31 +452,47 @@ const FapSmbInternalExplorePanel = observer(() => {
       </div>
       <div className="list-wrap explorer-table-wrap">
         <FolderView
-          columns={FOLDER_COLUMNS}
-          columnsOrder={FOLDER_COLUMNS_ORDER}
-          columnsSizeInit={FOLDER_COLUMNS_SIZE}
-          rows={rows}
-          bodyHeight={360}
-          showStatusBar={false}
-          listOnly={true}
-          selectionMode="multiple"
-          rowsSelectedId={fapSmbInternalStore.selectedFileIds}
-          onSelectedRowIdsChange={(rowIds: string[]) => {
-            fapSmbInternalStore.setSelectedFileIds(item.fileAccessPointId, rowIds)
+          data={{
+            columns: FOLDER_COLUMNS,
+            colsOrder: FOLDER_COLUMNS_ORDER,
+            rows,
+            rowIdsSelected: fapSmbInternalStore.selectedFileIds,
+            statusBar: {
+              itemCount: rows.length,
+              messageState: fapSmbInternalStore.isFileListLoading
+                ? { status: 'loading', messageText: 'loading files' }
+                : null,
+            },
           }}
-          onRowDoubleClick={(rowId: string) => {
-            const fileItem = getFileItemById(String(rowId || ''))
-            if (isPreviewableFile(fileItem)) {
-              runPreviewFile(fileItem)
-              return
+          config={{
+            colSizeById: FOLDER_COLUMNS_SIZE,
+            bodyHeight: 360,
+            isListOnly: true,
+            isStatusBarVisible: false,
+            selectionMode: 'multiple',
+            isLocked: fapSmbInternalStore.isFileListLoading,
+            isContextMenuBuiltInDisabled: true,
+          }}
+          onEvent={async (eventType, eventData) => {
+            if (eventType === 'rowIdsSelectedChange') {
+              fapSmbInternalStore.setSelectedFileIds(item.fileAccessPointId, eventData.rowIdsSelected as string[])
+              return { code: 0 }
             }
-            runDownloadOne(fileItem)
+            if (eventType === 'rowDoubleClick') {
+              const fileItem = getFileItemById(String(eventData.rowId || ''))
+              if (isPreviewableFile(fileItem)) {
+                runPreviewFile(fileItem)
+                return { code: 0 }
+              }
+              runDownloadOne(fileItem)
+              return { code: 0 }
+            }
+            if (eventType === 'rowContextMenu') {
+              openContextMenu(eventData.event as MouseEvent, String(eventData.rowId || ''))
+              return { code: 0 }
+            }
+            return { code: 0 }
           }}
-          onRowContextMenu={(event: MouseEvent, rowId: string) => {
-            openContextMenu(event, rowId)
-          }}
-          loading={fapSmbInternalStore.isFileListLoading}
-          loadingMessage="loading files"
         />
       </div>
       {contextMenuState.position ? (
@@ -484,34 +500,37 @@ const FapSmbInternalExplorePanel = observer(() => {
           data={{
             items: [
               {
-                type: 'item',
-                name: 'Download Selected',
+                id: 'download-selected',
+                label: 'Download Selected',
                 data: { action: 'download-selected' },
-                disabled: fapSmbInternalStore.selectedFileItemList.length === 0,
+                isDisabled: fapSmbInternalStore.selectedFileItemList.length === 0,
               },
               {
-                type: 'item',
-                name: 'Download This File',
+                id: 'download-one',
+                label: 'Download This File',
                 data: { action: 'download-one' },
-                disabled: !contextMenuState.rowId,
+                isDisabled: !contextMenuState.rowId,
               },
               {
-                type: 'item',
-                name: 'Preview',
+                id: 'preview',
+                label: 'Preview',
                 data: { action: 'preview' },
-                disabled: !isPreviewableFile(getFileItemById(contextMenuState.rowId)) || Boolean(renamingFileId),
+                isDisabled: !isPreviewableFile(getFileItemById(contextMenuState.rowId)) || Boolean(renamingFileId),
               },
               {
-                type: 'item',
-                name: 'Rename',
+                id: 'rename',
+                label: 'Rename',
                 data: { action: 'rename' },
-                disabled: !canWrite || !contextMenuState.rowId || Boolean(renamingFileId),
+                isDisabled: !canWrite || !contextMenuState.rowId || Boolean(renamingFileId),
               },
             ],
-            position: contextMenuState.position,
+          }}
+          config={{
+            isOpen: true,
+            posOpen: contextMenuState.position,
           }}
           onEvent={(eventType: string, eventData: any) => {
-            if (eventType === 'close') {
+            if (eventType === 'closeRequest') {
               closeContextMenu()
               return
             }

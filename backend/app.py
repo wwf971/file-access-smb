@@ -4,13 +4,48 @@ import os
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from flask_sock import Sock
 
 from db import database_config, ensure_database_exists, get_dir_base, init_schema
 from login import is_request_authorized, register_login_routes, validate_auth_token
 from fap_smb_external import register_fap_smb_external_routes
 from fap_smb_internal import register_fap_smb_internal_routes
+
+
+def normalize_app_base_path(raw_base_path: str) -> str:
+    normalized = str(raw_base_path or "").strip()
+    if not normalized or normalized == "/":
+        return ""
+    with_leading_slash = normalized if normalized.startswith("/") else f"/{normalized}"
+    return with_leading_slash.rstrip("/") or "/"
+
+
+class StripAppBasePathMiddleware:
+    def __init__(self, wsgi_app, base_path: str):
+        self.wsgi_app = wsgi_app
+        self.prefix = normalize_app_base_path(base_path)
+
+    def __call__(self, environ, start_response):
+        if not self.prefix:
+            return self.wsgi_app(environ, start_response)
+
+        path = str(environ.get("PATH_INFO") or "")
+        if path == self.prefix:
+            query = str(environ.get("QUERY_STRING") or "").strip()
+            location = f"{self.prefix}/"
+            if query:
+                location = f"{location}?{query}"
+            start_response("301 Moved Permanently", [("Location", location)])
+            return [b""]
+
+        prefix_with_slash = f"{self.prefix}/"
+        if path.startswith(prefix_with_slash):
+            stripped_path = path[len(self.prefix):] or "/"
+            environ["SCRIPT_NAME"] = f"{environ.get('SCRIPT_NAME') or ''}{self.prefix}"
+            environ["PATH_INFO"] = stripped_path
+
+        return self.wsgi_app(environ, start_response)
 
 
 def make_json_response(code: int, data: Any = None, message: str = ""):
@@ -26,11 +61,26 @@ def get_build_dir():
     return get_dir_base() / "build"
 
 
+APP_BASE_ASSET_PLACEHOLDER = "/__APP_BASE__/"
+
+
+def get_frontend_asset_base():
+    forwarded_prefix = str(request.headers.get("X-Forwarded-Prefix") or "").strip()
+    if forwarded_prefix:
+        return f"/{forwarded_prefix.strip('/')}/"
+    public_base_path = normalize_app_base_path(os.environ.get("APP_PUBLIC_BASE_PATH", "/files"))
+    if public_base_path:
+        return f"{public_base_path}/"
+    return "/"
+
+
 def serve_management_page():
     build_dir = get_build_dir()
     index_file = build_dir / "index.html"
     if index_file.is_file():
-        return send_from_directory(build_dir, "index.html")
+        index_html = index_file.read_text(encoding="utf-8")
+        index_html = index_html.replace(APP_BASE_ASSET_PLACEHOLDER, get_frontend_asset_base())
+        return Response(index_html, mimetype="text/html")
     return make_json_response(-1, message=f"build not found: {build_dir}"), 404
 
 
@@ -54,6 +104,7 @@ def health_ping():
 
 
 @app.get("/health/database")
+@app.post("/health/database")
 def health_database():
     return make_json_response(
         0,
@@ -90,6 +141,8 @@ def auth_guard():
     if path in (
         "/login",
         "/login/token",
+        "/login/temporary-token",
+        "/logout",
         "/health/ping",
     ):
         return None
@@ -136,6 +189,11 @@ def bootstrap_app():
     except Exception as error:
         is_database_bootstrap_ok = False
         database_bootstrap_error_text = str(error)
+
+
+app_base_path = normalize_app_base_path(os.environ.get("APP_BASE_PATH", "/files"))
+if app_base_path:
+    app.wsgi_app = StripAppBasePathMiddleware(app.wsgi_app, app_base_path)
 
 
 if __name__ == "__main__":

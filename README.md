@@ -1,6 +1,6 @@
 # file-access-smb
 
-SMB network disk access service that does not require having the SMB disks mounted locally, by directly accessing them. The service comes with a simple login authentication feature.
+SMB network disk access service that does not require having the SMB disks mounted locally, by directly accessing them. The service can use its built-in login feature or an external `@wwf971/auth-jwt` service.
 
 - backend: Flask + `smbprotocol` (`smbclient`)
 - frontend: Vite + React + MobX
@@ -31,6 +31,8 @@ Documents are placed under `/doc/`, including:
 ## Config
 
 Config about the service itself and config/metadata of existing file access points of different types are mainly database. It is also supported to specify config such as file access points in `/config/config.yaml` and `/config/config.0.yaml`(excluded by `/.gitngnore`), for convenience of testing.
+
+Auth mode is configured under `auth.type`. Use `internal` when this service should run independently. Use `@wwf971/auth-jwt` when several services should share the same sign-in state.
 
 ## Dependency
 

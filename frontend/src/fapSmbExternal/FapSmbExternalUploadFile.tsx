@@ -319,20 +319,31 @@ const FapSmbExternalUploadFile = observer(() => {
         </div>
         <div className="upload-file-table-wrap">
           <FolderView
-            columns={UPLOAD_COLUMNS}
-            columnsOrder={UPLOAD_COLUMNS_ORDER}
-            columnsSizeInit={UPLOAD_COLUMNS_SIZE}
-            rows={rows}
-            bodyHeight={220}
-            showStatusBar={true}
-            listOnly={true}
-            selectionMode="multiple"
-            rowsSelectedId={task.rowsSelectedId}
-            onSelectedRowIdsChange={(rowIds: string[]) => {
-              fapSmbExternalStore.setUploadSelectedRowIds(rowIds)
+            data={{
+              columns: UPLOAD_COLUMNS,
+              colsOrder: UPLOAD_COLUMNS_ORDER,
+              rows,
+              rowIdsSelected: task.rowsSelectedId,
+              statusBar: {
+                itemCount: rows.length,
+                messageState: null,
+              },
             }}
-            loading={false}
-            showStatusItemCount={true}
+            config={{
+              colSizeById: UPLOAD_COLUMNS_SIZE,
+              bodyHeight: 220,
+              isListOnly: true,
+              isStatusBarVisible: true,
+              isStatusItemCountVisible: true,
+              selectionMode: 'multiple',
+            }}
+            onEvent={async (eventType, eventData) => {
+              if (eventType === 'rowIdsSelectedChange') {
+                fapSmbExternalStore.setUploadSelectedRowIds(eventData.rowIdsSelected as string[])
+                return { code: 0 }
+              }
+              return { code: 0 }
+            }}
           />
         </div>
         {task.messageText || task.errorText ? (

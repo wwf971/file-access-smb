@@ -16,6 +16,8 @@ class AuthStore {
   username = ''
   password = ''
   token = ''
+  temporaryToken = ''
+  temporaryTokenExpiresAt = 0
   loginMode: 'credentials' | 'token' = 'credentials'
   message = ''
   messageType: 'error' | 'success' = 'error'
@@ -92,12 +94,34 @@ class AuthStore {
   }
 
   getAuthHeaders() {
-    if (!this.token) {
+    return this.getAuthHeadersForToken(this.token)
+  }
+
+  getAuthHeadersForToken(token: string) {
+    if (!token) {
       return {}
     }
     return {
-      Authorization: `Bearer ${this.token}`,
+      Authorization: `Bearer ${token}`,
     }
+  }
+
+  async getServiceToken() {
+    if (!this.token) return ''
+    const now = Math.floor(Date.now() / 1000)
+    if (this.temporaryToken && this.temporaryTokenExpiresAt > now + 30) {
+      return this.temporaryToken
+    }
+    const data = await this.requestJson('/login/temporary-token', {
+      method: 'POST',
+      body: JSON.stringify({ token: this.token }),
+    })
+    const temporaryToken = String(data.token || '')
+    runInAction(() => {
+      this.temporaryToken = temporaryToken
+      this.temporaryTokenExpiresAt = Number(data.expires_at || 0)
+    })
+    return temporaryToken
   }
 
   clearSessionOnUnauthorized() {
@@ -106,6 +130,8 @@ class AuthStore {
     }
     runInAction(() => {
       this.token = ''
+      this.temporaryToken = ''
+      this.temporaryTokenExpiresAt = 0
       this.isLoggedIn = false
       this.permission = 'R'
       this.isMenuOpen = false
@@ -135,6 +161,8 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.temporaryToken = ''
+        this.temporaryTokenExpiresAt = 0
         this.username = String(data.username || this.username)
         this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
@@ -148,6 +176,8 @@ class AuthStore {
       runInAction(() => {
         this.isLoggedIn = false
         this.permission = 'R'
+        this.temporaryToken = ''
+        this.temporaryTokenExpiresAt = 0
         this.message = String(error)
         this.messageType = 'error'
       })
@@ -174,6 +204,8 @@ class AuthStore {
       const token = String(data.token || '')
       runInAction(() => {
         this.token = token
+        this.temporaryToken = ''
+        this.temporaryTokenExpiresAt = 0
         this.username = String(data.username || '')
         this.permission = String(data.permission || 'R')
         this.isLoggedIn = true
@@ -186,6 +218,8 @@ class AuthStore {
       runInAction(() => {
         this.isLoggedIn = false
         this.permission = 'R'
+        this.temporaryToken = ''
+        this.temporaryTokenExpiresAt = 0
         this.message = String(error)
         this.messageType = 'error'
       })
@@ -240,7 +274,18 @@ class AuthStore {
     return { code: -1, message: `unsupported action: ${type}` }
   }
 
-  logout() {
+  async logout() {
+    const token = this.token
+    if (token) {
+      try {
+        await this.requestJson('/logout', {
+          method: 'POST',
+          body: JSON.stringify({ token }),
+        })
+      } catch (_error) {
+        // Local logout should still complete when the server is already unavailable.
+      }
+    }
     runInAction(() => {
       this.isLoggedIn = false
       this.username = ''

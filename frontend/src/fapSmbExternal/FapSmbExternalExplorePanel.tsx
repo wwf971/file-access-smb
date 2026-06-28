@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { observer } from 'mobx-react-lite'
-import { FolderView, MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
+import { MenuComp, SpinningCircle } from '@wwf971/react-comp-misc'
+import { SmbFolderExplorer } from '@wwf971/file-access-smb'
 import {
   fapSmbExternalStore,
   TEXT_EDITOR_MAX_SIZE_BYTES,
@@ -13,22 +14,6 @@ import {
   TEXT_EDITOR_BLOCKED_SUFFIX_SET,
 } from '../config'
 import { taskStore, type TaskCopyMoveItem } from '../store/taskStore'
-
-function buildParentPath(path: string) {
-  const normalized = String(path || '/')
-  if (normalized === '/' || normalized === '') {
-    return '/'
-  }
-  const parts = normalized.split('/').filter((item) => item)
-  if (parts.length === 0) {
-    return '/'
-  }
-  parts.pop()
-  if (parts.length === 0) {
-    return '/'
-  }
-  return `/${parts.join('/')}`
-}
 
 function buildNextPath(currentPath: string, itemName: string) {
   const base = currentPath === '/' ? '' : currentPath
@@ -104,19 +89,6 @@ const getElementUnderMenu = (event: MouseEvent) => {
     element.style.pointerEvents = pointerEvents
   })
   return targetElement
-}
-
-const FOLDER_COLUMNS = {
-  name: { data: 'name', align: 'left' },
-  type: { data: 'type', align: 'left' },
-  size: { data: 'size', align: 'left' },
-}
-
-const FOLDER_COLUMNS_ORDER = ['name', 'type', 'size']
-const FOLDER_COLUMNS_SIZE = {
-  name: { width: 260, minWidth: 140, resizable: true },
-  type: { width: 90, minWidth: 70, resizable: true },
-  size: { width: 90, minWidth: 70, resizable: true },
 }
 
 type NameCellProps = {
@@ -554,27 +526,27 @@ const FapSmbExternalExplorePanel = observer(() => {
     return <div className="panel-title">No FAP SMB external selected</div>
   }
 
-  const folderRows = (exploreState?.items || []).map((exploreItem) => ({
-    id: `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`,
-    data: {
+  const getExplorerRowData = (exploreItem: { name: string, isDirectory: boolean, sizeBytes?: number }) => {
+    const rowId = `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
+    return {
       name: (
         <NameCell
-          rowId={`${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
+          rowId={rowId}
           name={
-            exploreState?.editingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
+            exploreState?.editingRowId === rowId
               ? (exploreState?.editingName || exploreItem.name)
               : exploreItem.name
           }
-          isEditing={exploreState?.editingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
-          isRenaming={exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`}
-          isRowLocked={!canWrite || Boolean(exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`)}
+          isEditing={exploreState?.editingRowId === rowId}
+          isRenaming={exploreState?.renamingRowId === rowId}
+          isRowLocked={!canWrite || Boolean(exploreState?.renamingRowId === rowId)}
           onStartEditing={() => {
             if (!item) {
               return
             }
             fapSmbExternalStore.setExploreEditingRow(
               item.fileAccessPointId,
-              `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`,
+              rowId,
               exploreItem.name,
             )
           }}
@@ -588,7 +560,6 @@ const FapSmbExternalExplorePanel = observer(() => {
             if (!item || !exploreState) {
               return
             }
-            const rowId = `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
             if (!nextName || nextName === exploreItem.name) {
               fapSmbExternalStore.setExploreEditingRow(item.fileAccessPointId, null, '')
               return
@@ -613,133 +584,57 @@ const FapSmbExternalExplorePanel = observer(() => {
       ),
       type: exploreItem.isDirectory ? 'dir' : 'file',
       size: exploreItem.isDirectory ? '-' : String(exploreItem.sizeBytes),
-    },
-    rowClassName: exploreState?.renamingRowId === `${exploreItem.isDirectory ? 'd' : 'f'}:${exploreItem.name}`
-      ? 'explore-row-renaming'
-      : '',
-  }))
+    }
+  }
   const isNewFileDisabled = !canWrite || Boolean(exploreState?.renamingRowId) || Boolean(exploreState?.isExploring) || fapSmbExternalStore.isCreatingNewFile
+  const explorerControlContent = (
+    <button
+      type="button"
+      className="main-btn"
+      disabled={!canWrite || exploreState?.isExploring || fapSmbExternalStore.isUploadPopupOpen}
+      onClick={() => {
+        if (!item) {
+          return
+        }
+        const result = fapSmbExternalStore.openUploadPopup(item.fileAccessPointId, exploreState?.path || '/')
+        setMessageState({
+          status: result?.isSuccess ? 'success' : 'error',
+          messageText: result?.messageText || '',
+        })
+      }}
+    >
+      upload
+    </button>
+  )
 
   return (
     <div className="panel-root">
       <div className="panel-title">
         SMB Explore {item.name} [{item.sourceType}]
       </div>
-      <div className={`frontend-message-bar status-${messageState.messageText ? messageState.status : 'empty'}`}>
-        {messageState.status === 'loading' && messageState.messageText ? <SpinningCircle width={13} height={13} /> : null}
-        <div className="frontend-message-content">
-          <span className={messageState.messageText ? '' : 'frontend-message-empty'}>{messageState.messageText || '(NO MESSAGE)'}</span>
-          <button
-            type="button"
-            className="frontend-message-dismiss-btn"
-            onClick={() => {
-              setMessageState({
-                status: 'idle',
-                messageText: '',
-              })
-            }}
-            disabled={messageState.status === 'loading' || !messageState.messageText}
-          >
-            Dismiss
-          </button>
-        </div>
-      </div>
-      <div className="panel-row">
-        <input
-          className="text-input path-input"
-          value={exploreState?.path || '/'}
-          onChange={(event) => {
-            if (!item) {
-              return
-            }
-            fapSmbExternalStore.setExplorePath(item.fileAccessPointId, event.target.value)
-          }}
-        />
-        <button
-          type="button"
-          className="main-btn"
-          disabled={exploreState?.isExploring}
-          onClick={() => {
-            runExplore(exploreState?.path || '/')
-          }}
-        >
-          list
-        </button>
-        <button
-          type="button"
-          className="main-btn"
-          disabled={exploreState?.isExploring}
-          onClick={() => {
-            runExplore(buildParentPath(exploreState?.path || '/'))
-          }}
-        >
-          up
-        </button>
-        <button
-          type="button"
-          className="main-btn"
-          disabled={!canWrite || exploreState?.isExploring || fapSmbExternalStore.isUploadPopupOpen}
-          onClick={() => {
-            if (!item) {
-              return
-            }
-            const result = fapSmbExternalStore.openUploadPopup(item.fileAccessPointId, exploreState?.path || '/')
-            setMessageState({
-              status: result?.isSuccess ? 'success' : 'error',
-              messageText: result?.messageText || '',
-            })
-          }}
-        >
-          upload
-        </button>
-      </div>
       <div
         ref={explorerWrapRef}
         className="list-wrap explorer-table-wrap external-explorer-table"
-        onMouseDownCapture={(event) => {
-          const rowElement = (event.target as HTMLElement | null)?.closest?.('[data-row-id]')
-          if (event.shiftKey && rowElement) {
-            event.preventDefault()
-          }
-        }}
-        onContextMenu={(event) => {
-          const rowElement = (event.target as HTMLElement | null)?.closest?.('[data-row-id]')
-          if (rowElement) {
-            return
-          }
-          openContextMenu(event, '')
-        }}
       >
-        <FolderView
-          columns={FOLDER_COLUMNS}
-          columnsOrder={FOLDER_COLUMNS_ORDER}
-          columnsSizeInit={FOLDER_COLUMNS_SIZE}
-          rows={folderRows}
-          bodyHeight={320}
-          showStatusBar={false}
-          listOnly={true}
-          selectionMode="multiple"
-          rowsSelectedId={exploreState?.rowsSelectedId || []}
-          onSelectedRowIdsChange={(rowIds: string[]) => {
-            fapSmbExternalStore.setExploreSelectedRowIds(item.fileAccessPointId, rowIds)
+        <SmbFolderExplorer
+          store={fapSmbExternalStore}
+          data={{
+            accessPointId: item.fileAccessPointId,
+            getRowData: getExplorerRowData,
+            controlContent: explorerControlContent,
           }}
-          onRowDoubleClick={(rowId: string) => {
-            if (exploreState?.renamingRowId) {
+          config={{
+            bodyHeight: 320,
+          }}
+          onEvent={(eventType, eventData) => {
+            if (eventType === 'rowContextMenu' && eventData.event instanceof MouseEvent) {
+              openContextMenu(eventData.event, eventData.rowId || '')
               return
             }
-            const normalizedRowId = String(rowId || '')
-            const isDir = normalizedRowId.startsWith('d:')
-            if (!isDir) {
-              return
+            if (eventType === 'backgroundContextMenu' && eventData.event) {
+              openContextMenu(eventData.event as React.MouseEvent<HTMLDivElement>, '')
             }
-            const name = normalizedRowId.slice(2)
-            runExplore(buildNextPath(exploreState?.path || '/', name))
           }}
-          onRowContextMenu={(event: MouseEvent, rowId: string) => {
-            openContextMenu(event, rowId)
-          }}
-          loading={exploreState?.isExploring}
-          loadingMessage="loading directory"
         />
       </div>
       {contextMenuState.position ? (
@@ -747,89 +642,92 @@ const FapSmbExternalExplorePanel = observer(() => {
           data={{
             items: [
               {
-                type: 'item',
-                name: 'Download',
+                id: 'download',
+                label: 'Download',
                 data: { action: 'download' },
-                disabled: !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId),
+                isDisabled: !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Preview',
+                id: 'preview',
+                label: 'Preview',
                 data: { action: 'preview' },
-                disabled: !isPreviewableExploreItem(getExploreItemByRowId(contextMenuState.rowId)) || Boolean(exploreState?.renamingRowId),
+                isDisabled: !isPreviewableExploreItem(getExploreItemByRowId(contextMenuState.rowId)) || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Open Text',
+                id: 'open-text',
+                label: 'Open Text',
                 data: { action: 'open-text' },
-                disabled: !canWrite || !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId) || fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving,
+                isDisabled: !canWrite || !contextMenuState.rowId?.startsWith('f:') || Boolean(exploreState?.renamingRowId) || fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving,
               },
               {
-                type: 'menu',
-                name: 'New',
-                disabled: isNewFileDisabled,
+                id: 'new',
+                label: 'New',
+                isDisabled: isNewFileDisabled,
                 children: [
                   {
-                    type: 'item',
-                    name: '.txt',
+                    id: 'new-txt',
+                    label: '.txt',
                     data: { action: 'new-file', suffix: '.txt' },
-                    disabled: isNewFileDisabled,
+                    isDisabled: isNewFileDisabled,
                   },
                   {
-                    type: 'item',
-                    name: '.md',
+                    id: 'new-md',
+                    label: '.md',
                     data: { action: 'new-file', suffix: '.md' },
-                    disabled: isNewFileDisabled,
+                    isDisabled: isNewFileDisabled,
                   },
                   {
-                    type: 'item',
-                    name: 'custom',
+                    id: 'new-custom',
+                    label: 'custom',
                     data: { action: 'new-file-custom' },
-                    disabled: isNewFileDisabled,
+                    isDisabled: isNewFileDisabled,
                   },
                 ],
               },
               {
-                type: 'item',
-                name: 'Download Zip',
+                id: 'download-zip',
+                label: 'Download Zip',
                 data: { action: 'download-zip' },
-                disabled: !contextMenuState.rowId || fapSmbExternalStore.isZipRunning || Boolean(exploreState?.renamingRowId),
+                isDisabled: !contextMenuState.rowId || fapSmbExternalStore.isZipRunning || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Copy To',
+                id: 'copy-to',
+                label: 'Copy To',
                 data: { action: 'copy-to' },
-                disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+                isDisabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Move To',
+                id: 'move-to',
+                label: 'Move To',
                 data: { action: 'move-to' },
-                disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+                isDisabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Open',
+                id: 'open',
+                label: 'Open',
                 data: { action: 'open' },
-                disabled: !contextMenuState.rowId?.startsWith('d:') || Boolean(exploreState?.renamingRowId),
+                isDisabled: !contextMenuState.rowId?.startsWith('d:') || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Rename',
+                id: 'rename',
+                label: 'Rename',
                 data: { action: 'rename' },
-                disabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
+                isDisabled: !canWrite || !contextMenuState.rowId || Boolean(exploreState?.renamingRowId),
               },
               {
-                type: 'item',
-                name: 'Clean Bak Files',
+                id: 'clean-bak',
+                label: 'Clean Bak Files',
                 data: { action: 'clean-bak' },
-                disabled: !canWrite || Boolean(exploreState?.renamingRowId) || fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving,
+                isDisabled: !canWrite || Boolean(exploreState?.renamingRowId) || fapSmbExternalStore.isTextEditorLoading || fapSmbExternalStore.isTextEditorSaving,
               },
             ],
-            position: contextMenuState.position,
+          }}
+          config={{
+            isOpen: true,
+            posOpen: contextMenuState.position,
           }}
           onEvent={(eventType: string, eventData: any) => {
-            if (eventType === 'close') {
+            if (eventType === 'closeRequest') {
               closeContextMenu()
               return
             }

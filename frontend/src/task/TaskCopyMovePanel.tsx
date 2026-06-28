@@ -22,7 +22,6 @@ const TaskCopyMovePanel = observer(() => {
   if (!taskStore.isCopyMovePanelOpen) {
     return null
   }
-  const FolderViewComp = FolderView as any
   const targetFolderPath = taskStore.copyMovePreviewTargetFolderPath
   const targetFileAccessPoint = taskStore.copyMovePreviewTargetFileAccessPoint
   const rows = taskStore.copyMoveItemList.map((item, index) => ({
@@ -100,18 +99,25 @@ const TaskCopyMovePanel = observer(() => {
         </div>
         <TaskCopyMoveTargetSelector />
         <div className="task-copy-move-table-wrap">
-          <FolderViewComp
-            columns={COPY_MOVE_COLUMNS}
-            columnsOrder={COPY_MOVE_COLUMNS_ORDER}
-            columnsSizeInit={COPY_MOVE_COLUMNS_SIZE}
-            rows={rows}
-            bodyHeight={260}
-            showStatusBar={true}
-            listOnly={true}
-            selectionMode="none"
-            rowsSelectedId={[]}
-            loading={false}
-            showStatusItemCount={true}
+          <FolderView
+            data={{
+              columns: COPY_MOVE_COLUMNS,
+              colsOrder: COPY_MOVE_COLUMNS_ORDER,
+              rows,
+              rowIdsSelected: [],
+              statusBar: {
+                itemCount: rows.length,
+                messageState: null,
+              },
+            }}
+            config={{
+              colSizeById: COPY_MOVE_COLUMNS_SIZE,
+              bodyHeight: 260,
+              isListOnly: true,
+              isStatusBarVisible: true,
+              isStatusItemCountVisible: true,
+              selectionMode: 'none',
+            }}
           />
         </div>
         {taskStore.errorText || taskStore.messageText || taskStore.isSubmitting ? (

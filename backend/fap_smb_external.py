@@ -583,6 +583,7 @@ def register_fap_smb_external_routes(app, sock, make_json_response, validate_aut
         return make_json_response(0, data={"item": item})
 
     @app.get("/fap-smb-external/list")
+    @app.post("/fap-smb-external/list")
     def file_access_point_list():
         if not has_request_permission("R"):
             return make_json_response(-1, message="read permission required"), 403

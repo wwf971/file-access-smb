@@ -10,7 +10,10 @@ const normalizeBasePath = (rawBasePath: string | undefined): string => {
   return withLeadingSlash.endsWith('/') ? withLeadingSlash : `${withLeadingSlash}/`
 }
 
-const appBasePath = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
+const APP_BASE_ASSET_PLACEHOLDER = '/__APP_BASE__/'
+const appBasePath = process.env.VITE_APP_BASE_PATH
+  ? normalizeBasePath(process.env.VITE_APP_BASE_PATH)
+  : APP_BASE_ASSET_PLACEHOLDER
 
 export default defineConfig({
   base: appBasePath,

@@ -1,0 +1,247 @@
+.smb-md-editor-root {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.smb-md-editor-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.smb-md-editor-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.smb-md-editor-title {
+  font-weight: 600;
+  color: #1f3761;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smb-md-editor-subtitle {
+  color: #536b91;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smb-md-editor-action-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.smb-md-editor-btn {
+  min-height: 24px;
+  border: 1px solid #b8c9df;
+  border-radius: 2px;
+  background: #ffffff;
+  padding: 2px 7px;
+  color: #1f3761;
+  font-size: 12px;
+}
+
+.smb-md-editor-btn:disabled {
+  color: #8b99ad;
+  background: #f4f6f8;
+}
+
+.smb-md-editor-message {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #cfd8ea;
+  border-radius: 2px;
+  padding: 3px 5px;
+  font-size: 12px;
+}
+
+.smb-md-editor-message.status-empty {
+  color: #8b99ad;
+}
+
+.smb-md-editor-message-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.smb-md-editor-message-dismiss {
+  flex-shrink: 0;
+  min-height: 22px;
+  border: 1px solid #b8c9df;
+  border-radius: 2px;
+  background: #ffffff;
+  padding: 1px 6px;
+  color: #1f3761;
+  font-size: 12px;
+}
+
+.smb-md-editor-message-dismiss:disabled {
+  color: #8b99ad;
+  background: #f4f6f8;
+}
+
+.smb-md-editor-message.status-info,
+.smb-md-editor-message.status-loading {
+  background: #edf3ff;
+  color: #1b4d96;
+}
+
+.smb-md-editor-message.status-success {
+  background: #f4fbf5;
+  border-color: #cde8d2;
+  color: #247a3d;
+}
+
+.smb-md-editor-message.status-error {
+  background: #fff2f2;
+  border-color: #f2c2c2;
+  color: #8c2a2a;
+}
+
+.smb-md-editor-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr);
+  gap: 5px;
+}
+
+.smb-md-editor-body.has-preview {
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr);
+}
+
+.smb-md-editor-input {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid #c7d3e8;
+  border-radius: 2px;
+  padding: 5px;
+  box-sizing: border-box;
+  resize: none;
+  outline: none;
+  background: #ffffff;
+  color: #1d2f4f;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.smb-md-editor-input:focus {
+  border-color: #92add5;
+}
+
+.smb-md-editor-preview {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #d8e0ee;
+  border-radius: 2px;
+  background: #f8fbff;
+  color: #223a61;
+  padding: 6px;
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  user-select: text;
+}
+
+.smb-md-editor-plain-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.smb-md-editor-md-title {
+  color: #1f3761;
+  font-weight: 700;
+  margin: 4px 0 3px;
+}
+
+.smb-md-editor-md-title-level-1 {
+  font-size: 20px;
+}
+
+.smb-md-editor-md-title-level-2 {
+  font-size: 18px;
+}
+
+.smb-md-editor-md-title-level-3 {
+  font-size: 16px;
+}
+
+.smb-md-editor-md-title-level-4,
+.smb-md-editor-md-title-level-5,
+.smb-md-editor-md-title-level-6 {
+  font-size: 14px;
+}
+
+.smb-md-editor-md-block {
+  margin: 3px 0;
+}
+
+.smb-md-editor-md-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 3px 0;
+  padding-left: 10px;
+}
+
+.smb-md-editor-md-list-item {
+  border-left: 2px solid #bfd0e8;
+  padding-left: 4px;
+}
+
+.smb-md-editor-md-quote {
+  border-left: 2px solid #abc0e0;
+  color: #48648f;
+  padding-left: 5px;
+  margin: 4px 0;
+}
+
+.smb-md-editor-md-pre {
+  border: 1px solid #d8e0ee;
+  border-radius: 2px;
+  background: #ffffff;
+  padding: 5px;
+  overflow: auto;
+  margin: 4px 0;
+}
+
+.smb-md-editor-md-code {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #edf3ff;
+  border: 1px solid #d8e0ee;
+  border-radius: 2px;
+  padding: 0 3px;
+}
+
+.smb-md-editor-md-link {
+  color: #245caa;
+}
+
+.smb-md-editor-md-strong {
+  font-weight: 700;
+}
+
+.smb-md-editor-md-em {
+  font-style: italic;
+}

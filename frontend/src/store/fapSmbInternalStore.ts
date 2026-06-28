@@ -160,7 +160,7 @@ export class FapSmbInternalStore {
       this.errorText = ''
     })
     try {
-      const data = await requestAuthenticatedJson('/fap-smb-internal/list')
+      const data = await requestAuthenticatedJson('/fap-smb-internal/list', { method: 'POST', body: JSON.stringify({}) })
       const items = Array.isArray(data.items) ? (data.items as FapSmbInternalItem[]) : []
       runInAction(() => {
         this.items = items

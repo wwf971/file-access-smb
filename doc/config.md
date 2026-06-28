@@ -13,19 +13,40 @@ Parse rule:
 
 Key sections:
 
-- `auth`: login username/password and zip encryption key
+- `auth`: auth mode, login users for internal mode, and auth-jwt endpoint for external mode
 - `config_databases`: PostgreSQL targets
 - `file_access_point_smb_external`: static SMB external file access points loaded from local config
 - `file_access_point_smb_internal`: static SMB internal file access points loaded from local config
 
-`auth` example:
+`auth` internal example:
 
 ```yaml
 auth:
-  login_username: example
-  login_password: example_password
-  zip_encryption_key: example_zip_key
+  type: internal
+  users:
+    - username: example_rw
+      password: example_password
+      permission: RW
+      zip_encryption_key: example_zip_key
+      zip_timeout: 60
 ```
+
+`auth.type: internal` keeps the service self-contained. The backend checks users from local config and issues local tokens.
+
+`auth` external example:
+
+```yaml
+auth:
+  type: "@wwf971/auth-jwt"
+  ip: 127.0.0.1
+  port: 9531
+  service_id: file-access-smb
+  read_permission_code: 1
+  write_permission_code: 2
+  default_permission: RW
+```
+
+`auth.type: "@wwf971/auth-jwt"` makes the backend use auth-jwt for login and token verification. The service still keeps its own `R` and `W` permission checks. For now, externally verified users receive `default_permission`. The service permission fields describe the intended auth-jwt service permission mapping.
 
 `config_databases` example:
 

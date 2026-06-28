@@ -39,7 +39,7 @@ export class ServiceStore {
 
   async requestDatabaseInfo() {
     try {
-      const data = await requestAuthenticatedJson('/health/database')
+      const data = await requestAuthenticatedJson('/health/database', { method: 'POST', body: JSON.stringify({}) })
       runInAction(() => {
         this.databaseText = JSON.stringify(data)
       })

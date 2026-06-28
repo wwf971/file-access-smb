@@ -1,5 +1,6 @@
 # this file contains example config data
 auth:
+  type: internal
   users:
     - username: example_rw
       password: example_password
